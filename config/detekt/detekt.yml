@@ -1,0 +1,25 @@
+# detekt 기준 설정 — buildUponDefaultConfig=true 이므로 기본값 위에 덮어씀.
+complexity:
+  LongMethod:
+    threshold: 80
+  LongParameterList:
+    functionThreshold: 8
+    constructorThreshold: 10
+  TooManyFunctions:
+    thresholdInClasses: 20
+
+style:
+  MagicNumber:
+    active: false
+  ReturnCount:
+    max: 4
+  UnusedPrivateMember:
+    active: true
+
+naming:
+  FunctionNaming:
+    # Compose 함수는 PascalCase 허용
+    ignoreAnnotated: ['Composable']
+
+compose:
+  active: false

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose 앱 셸 테마. 실제 색/타이포는 Compose 의 YeoksadamTheme 가 담당. -->
+    <style name="Theme.Yeoksadam" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/hanji</item>
+        <item name="android:statusBarColor">@color/hanji</item>
+        <item name="android:navigationBarColor">@color/hanji</item>
+    </style>
+</resources>

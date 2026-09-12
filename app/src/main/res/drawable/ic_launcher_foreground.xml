@@ -1,0 +1,13 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 단청 메달 느낌의 단순 심볼: 외곽 원 + 한지색 + 먹 글자 '史' 대용 획 -->
+    <path
+        android:fillColor="#F4ECDD"
+        android:pathData="M54,30 m-22,0 a22,22 0 1,0 44,0 a22,22 0 1,0 -44,0" />
+    <path
+        android:fillColor="#1A1714"
+        android:pathData="M44,22 h20 v4 h-20 z M52,26 h4 v18 h-4 z M40,34 h28 v4 h-28 z" />
+</vector>

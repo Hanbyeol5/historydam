@@ -1,0 +1,9 @@
+# 이 파일을 local.properties 로 복사한 뒤 값 채우기 (local.properties 는 커밋 금지)
+# Android SDK 위치 (Android Studio 가 자동 설정)
+sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
+
+# 백엔드 / 외부 키
+API_BASE_URL=https://api.example.com/
+# 네이버 클라우드 플랫폼(NCP) → Maps → Mobile Dynamic Map 의 Client ID
+NAVER_MAP_CLIENT_ID=your_ncp_map_client_id
+GEOSPATIAL_API_KEY=your_arcore_geospatial_key
