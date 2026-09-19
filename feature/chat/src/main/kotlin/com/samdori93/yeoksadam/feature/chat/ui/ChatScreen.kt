@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
@@ -37,8 +38,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -46,11 +47,12 @@ import com.samdori93.yeoksadam.core.designsystem.component.MedallionPortrait
 import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
 import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
 import com.samdori93.yeoksadam.core.designsystem.theme.YeoksadamTheme
+import com.samdori93.yeoksadam.core.domain.model.ChatMessage
+import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.ui.sample.SampleData
-import com.samdori93.yeoksadam.feature.chat.viewmodel.ChatLine
 import com.samdori93.yeoksadam.feature.chat.viewmodel.ChatUiState
 
-/** 챗봇 텍스트 대화 (목업 5번) — 실제 입력·로컬 페르소나 응답. */
+/** 챗봇 텍스트 대화 (실제 AI 및 RAG 연동) */
 @Composable
 fun ChatScreen(
     figureId: String,
@@ -118,7 +120,9 @@ fun ChatScreen(
             }
             items2(state.messages)
             if (state.responding) {
-                item { Bubble(text = "…", them = true) }
+                item {
+                    Bubble(message = ChatMessage(role = Role.FIGURE, text = "…"), them = true)
+                }
             }
         }
 
@@ -175,15 +179,16 @@ fun ChatScreen(
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.items2(messages: List<ChatLine>) {
+private fun androidx.compose.foundation.lazy.LazyListScope.items2(messages: List<ChatMessage>) {
     items(messages.size) { i ->
         val m = messages[i]
-        Bubble(text = m.text, them = !m.mine)
+        val them = m.role == Role.FIGURE
+        Bubble(message = m, them = them)
     }
 }
 
 @Composable
-private fun Bubble(text: String, them: Boolean) {
+private fun Bubble(message: ChatMessage, them: Boolean) {
     val shape = if (them) {
         RoundedCornerShape(4.dp, 16.dp, 16.dp, 16.dp)
     } else {
@@ -193,8 +198,7 @@ private fun Bubble(text: String, them: Boolean) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (them) Arrangement.Start else Arrangement.End,
     ) {
-        Text(
-            text = text,
+        Column(
             modifier = Modifier
                 .widthIn(max = 260.dp)
                 .background(if (them) DancheongColors.HanjiCard else DancheongColors.Jujak, shape)
@@ -203,11 +207,33 @@ private fun Bubble(text: String, them: Boolean) {
                     color = if (them) DancheongColors.Meok.copy(alpha = 0.08f) else Color.Transparent,
                     shape = shape,
                 )
-                .padding(horizontal = 14.dp, vertical = 10.dp),
-            color = if (them) DancheongColors.Meok else Color.White,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-        )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Text(
+                text = message.text,
+                color = if (them) DancheongColors.Meok else Color.White,
+                fontSize = 14.sp,
+                lineHeight = 20.sp,
+            )
+
+            // RAG 사료 근거가 존재할 경우 말풍선 하단에 단청 스탈로 표시
+            if (message.citations.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                HorizontalDivider(
+                    color = if (them) DancheongColors.Meok.copy(alpha = 0.15f) else Color.White.copy(alpha = 0.3f),
+                    thickness = 0.5.dp
+                )
+                Spacer(Modifier.height(4.dp))
+                message.citations.forEach { citation ->
+                    Text(
+                        text = "📜 [사료] ${citation.source}: \"${citation.excerpt}\"",
+                        fontSize = 11.sp,
+                        color = if (them) DancheongColors.MeokSoft else Color.White.copy(alpha = 0.85f),
+                        lineHeight = 15.sp
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -217,7 +243,12 @@ private fun ChatPreview() {
     YeoksadamTheme {
         ChatScreen(
             figureId = "fig_chae",
-            state = ChatUiState(messages = listOf(ChatLine(false, "어서 오시게."), ChatLine(true, "반갑습니다."))),
+            state = ChatUiState(
+                messages = listOf(
+                    ChatMessage(role = Role.FIGURE, text = "어서 오시게."),
+                    ChatMessage(role = Role.USER, text = "반갑습니다.")
+                )
+            ),
             onInputChange = {},
             onSend = {},
             onBack = {},
