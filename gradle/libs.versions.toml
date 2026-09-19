@@ -1,6 +1,6 @@
 [versions]
 # Build / language
-agp = "8.7.3"
+agp = "8.6.0"
 kotlin = "2.1.0"
 ksp = "2.1.0-1.0.29"
 jvmTarget = "17"
