@@ -30,6 +30,8 @@ import com.samdori93.yeoksadam.feature.map.navigation.mapScreen
 import com.samdori93.yeoksadam.feature.map.navigation.navigateToMap
 import com.samdori93.yeoksadam.feature.ar.navigation.arScreen
 import com.samdori93.yeoksadam.feature.ar.navigation.navigateToAr
+import com.samdori93.yeoksadam.feature.chat.navigation.ChatList
+import com.samdori93.yeoksadam.feature.chat.navigation.navigateToChatList
 import com.samdori93.yeoksadam.feature.notification.navigation.navigateToNotification
 import com.samdori93.yeoksadam.feature.notification.navigation.notificationScreen
 import com.samdori93.yeoksadam.feature.profile.navigation.Profile
@@ -87,8 +89,18 @@ fun YeoksadamAppRoot(
                 onOpenFigure = { navController.navigateToFigureSheet(it) },
             )
             chatScreen(
-                onBack = { navController.popBackStack() },
-                onSwitchToVoice = { navController.navigateToVoice(it) },
+                onFigureClick = { figureId ->
+                    // 1. 목록에서 인물 카드를 누르면 해당 figureId 대화방으로 이동
+                    navController.navigateToChat(figureId)
+                },
+                onBack = {
+                    // 2. 대화방에서 뒤로가기 누르면 인물 목록 화면으로 복귀
+                    navController.popBackStack()
+                },
+                onSwitchToVoice = { figureId ->
+                    // 3. 기존 음성 대화 전환 로직 유지
+                    navController.navigateToVoice(figureId)
+                }
             )
             voiceScreen(
                 onBack = { navController.popBackStack() },
@@ -107,7 +119,7 @@ private fun androidx.navigation.NavDestination.hierarchyHasTab(tab: TopLevelDest
             TopLevelDestination.HOME -> dest.hasRoute(Home::class)
             TopLevelDestination.MAP -> dest.hasRoute(MapGraph::class)
             TopLevelDestination.CAMERA -> dest.hasRoute(CameraGraph::class)
-            TopLevelDestination.CHAT -> dest.hasRoute(Chat::class)
+            TopLevelDestination.CHAT -> dest.hasRoute(route = ChatList::class) || dest.hasRoute(route = Chat::class)
             TopLevelDestination.MENU -> dest.hasRoute(Profile::class)
         }
     }
@@ -122,7 +134,7 @@ private fun NavHostController.navigateToTab(tab: TopLevelDestination) {
         TopLevelDestination.HOME -> navigateToHome(options)
         TopLevelDestination.MAP -> navigateToMap(options)
         TopLevelDestination.CAMERA -> navigateToCamera(options)
-        TopLevelDestination.CHAT -> navigateToChat("fig_jeongjo", options)
+        TopLevelDestination.CHAT -> navigateToChatList(navOptions = options)
         TopLevelDestination.MENU -> navigateToProfile(options)
     }
 }

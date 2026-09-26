@@ -16,18 +16,38 @@ data class SampleFigure(
 
 object SampleData {
 
+    val sejong = SampleFigure("fig_sejong", "세종대왕", "조선 제4대 국왕", "경복궁", "1.2km", discovered = true)
     val chae = SampleFigure("fig_chae", "채제공", "번암", "수원화성", "30m", discovered = true)
+    val jeongjo = SampleFigure("fig_jeongjo", "정조", "조선 제22대 국왕", "창덕궁", "1.8km", discovered = true)
 
     val figures: List<SampleFigure> = listOf(
+        sejong,
+        chae,
+        jeongjo,
+        SampleFigure("fig_gojong", "고종", "조선 제26대 국왕", "덕수궁", "900m", discovered = true),
+        SampleFigure("fig_sinsaimdang", "신사임당", "화가 · 시인", "종묘", "2.1km", discovered = true),
         SampleFigure("fig_kang", "강세황", "표암 · 문인화가", "—", "미발견"),
         SampleFigure("fig_kim", "김홍도", "단원 · 화가", "—", "미발견"),
         SampleFigure("fig_yoon", "윤두서", "공재 · 자화상", "—", "미발견"),
         SampleFigure("fig_jeongyy", "정약용", "다산초당 · 실학자", "강진", "미발견"),
-        chae,
     )
 
-    fun figure(id: String): SampleFigure =
-        figures.firstOrNull { it.id == id } ?: chae
+    /**
+     * figureId가 "fig_sejong" 또는 "sejong"으로 전달되더라도 인물을 유연하게 찾습니다.
+     * 목록에 없는 새 인물이 들어올 경우 기본 프로필 객체를 생성해 전달합니다.
+     */
+    fun figure(id: String): SampleFigure {
+        val cleanId = id.removePrefix("fig_")
+        return figures.firstOrNull {
+            it.id == id || it.id.removePrefix("fig_") == cleanId
+        } ?: SampleFigure(
+            id = id,
+            name = if (cleanId == "sejong") "세종대왕" else "역사 인물",
+            title = "조선 시대",
+            site = "—",
+            distanceLabel = "—"
+        )
+    }
 
     /** 챗봇 샘플 대화 (목업 5번). true=인물(them), false=나(me). */
     val chatTranscript: List<Pair<Boolean, String>> = listOf(

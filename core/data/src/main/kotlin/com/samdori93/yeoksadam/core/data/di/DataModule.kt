@@ -5,11 +5,13 @@ import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.samdori93.yeoksadam.core.common.dispatcher.DefaultDispatcherProvider
 import com.samdori93.yeoksadam.core.common.dispatcher.DispatcherProvider
+import com.samdori93.yeoksadam.core.data.repository.ChatRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.FigureRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.DiscoveryRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.HeritageRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.LocationRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.VisionRepositoryImpl
+import com.samdori93.yeoksadam.core.domain.repository.ChatRepository
 import com.samdori93.yeoksadam.core.domain.repository.DiscoveryRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
 import com.samdori93.yeoksadam.core.domain.repository.HeritageRepository
@@ -26,6 +28,10 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 abstract class DataModule {
+
+    @Binds
+    @Singleton
+    abstract fun bindChatRepository(impl: ChatRepositoryImpl): ChatRepository
 
     @Binds
     @Singleton

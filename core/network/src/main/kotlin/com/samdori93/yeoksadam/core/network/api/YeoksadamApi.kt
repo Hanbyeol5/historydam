@@ -1,8 +1,12 @@
 package com.samdori93.yeoksadam.core.network.api
 
+import com.samdori93.yeoksadam.core.network.dto.ChatRequestDto
+import com.samdori93.yeoksadam.core.network.dto.ChatResponseDto
 import com.samdori93.yeoksadam.core.network.dto.FigureDto
 import com.samdori93.yeoksadam.core.network.dto.NearbyResponseDto
+import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -21,4 +25,10 @@ interface YeoksadamApi {
 
     @GET("v1/figures/{id}")
     suspend fun getFigure(@Path("id") id: String): FigureDto
+
+    /** AI 대화 메시지 전송 */
+    @POST("v1/chat")
+    suspend fun sendChatMessage(
+        @Body request: ChatRequestDto
+    ): ChatResponseDto
 }
