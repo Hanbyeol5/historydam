@@ -27,7 +27,7 @@ interface YeoksadamApi {
     suspend fun getFigure(@Path("id") id: String): FigureDto
 
     /** AI 대화 메시지 전송 */
-    @POST("v1/chat")
+    @POST("chat")
     suspend fun sendChatMessage(
         @Body request: ChatRequestDto
     ): ChatResponseDto

@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ChatRequestDto(
     @SerialName("figureId") val figureId: String,
-    @SerialName("message") val message: String
+    @SerialName("question") val message: String
 )
 
 @Serializable
@@ -18,6 +18,6 @@ data class CitationDto(
 @Serializable
 data class ChatResponseDto(
     @SerialName("id") val id: String = "",
-    @SerialName("text") val text: String,
+    @SerialName("answer") val text: String,
     @SerialName("citations") val citations: List<CitationDto> = emptyList()
 )

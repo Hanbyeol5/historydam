@@ -22,8 +22,7 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            "\"${secret("API_BASE_URL", "https://api.example.com/")}\"",
-        )
+            value = "\"${secret(key = "API_BASE_URL", default = "http://10.0.2.2:8000/")}\""        )
     }
 }
 
@@ -36,4 +35,7 @@ dependencies {
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.kotlinx.serialization)
     implementation(libs.kotlinx.serialization.json)
+
+    implementation("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
 }
