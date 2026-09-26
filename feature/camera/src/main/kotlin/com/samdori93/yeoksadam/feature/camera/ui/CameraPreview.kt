@@ -1,37 +1,51 @@
 package com.samdori93.yeoksadam.feature.camera.ui
 
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
-import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.CameraController
+import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 
-/** CameraX 실시간 후면 카메라 프리뷰. */
+/**
+ * CameraX 후면 카메라 프리뷰 + 사진 캡처.
+ * [LifecycleCameraController] 가 프리뷰·ImageCapture 바인딩을 라이프사이클에 맞춰 자동 관리한다.
+ */
 @Composable
-fun CameraPreview(modifier: Modifier = Modifier) {
+fun CameraPreview(
+    controller: CameraCaptureController,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val camController = remember {
+        LifecycleCameraController(context).apply {
+            cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            setEnabledUseCases(CameraController.IMAGE_CAPTURE)
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        camController.bindToLifecycle(lifecycleOwner)
+        controller.controller = camController
+        onDispose {
+            controller.controller = null
+            camController.unbind()
+        }
+    }
+
     AndroidView(
         modifier = modifier,
         factory = { ctx ->
-            val previewView = PreviewView(ctx).apply {
+            PreviewView(ctx).apply {
+                this.controller = camController
                 scaleType = PreviewView.ScaleType.FILL_CENTER
             }
-            val providerFuture = ProcessCameraProvider.getInstance(ctx)
-            providerFuture.addListener({
-                val provider = providerFuture.get()
-                val preview = Preview.Builder().build().also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
-                runCatching {
-                    provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview)
-                }
-            }, ContextCompat.getMainExecutor(ctx))
-            previewView
         },
     )
 }

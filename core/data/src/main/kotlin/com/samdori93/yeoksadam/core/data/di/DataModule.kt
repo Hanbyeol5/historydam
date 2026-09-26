@@ -6,11 +6,15 @@ import com.google.android.gms.location.LocationServices
 import com.samdori93.yeoksadam.core.common.dispatcher.DefaultDispatcherProvider
 import com.samdori93.yeoksadam.core.common.dispatcher.DispatcherProvider
 import com.samdori93.yeoksadam.core.data.repository.FigureRepositoryImpl
+import com.samdori93.yeoksadam.core.data.repository.DiscoveryRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.HeritageRepositoryImpl
 import com.samdori93.yeoksadam.core.data.repository.LocationRepositoryImpl
+import com.samdori93.yeoksadam.core.data.repository.VisionRepositoryImpl
+import com.samdori93.yeoksadam.core.domain.repository.DiscoveryRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
 import com.samdori93.yeoksadam.core.domain.repository.HeritageRepository
 import com.samdori93.yeoksadam.core.domain.repository.LocationRepository
+import com.samdori93.yeoksadam.core.domain.repository.VisionRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -34,6 +38,14 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindHeritageRepository(impl: HeritageRepositoryImpl): HeritageRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindVisionRepository(impl: VisionRepositoryImpl): VisionRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindDiscoveryRepository(impl: DiscoveryRepositoryImpl): DiscoveryRepository
 
     @Binds
     @Singleton

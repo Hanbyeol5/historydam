@@ -24,6 +24,12 @@ android {
             "API_BASE_URL",
             "\"${secret("API_BASE_URL", "https://api.example.com/")}\"",
         )
+        // Gemini 멀티모달 비전 키 — local.properties 의 GEMINI_API_KEY (커밋 금지)
+        buildConfigField(
+            "String",
+            "GEMINI_API_KEY",
+            "\"${secret("GEMINI_API_KEY", "")}\"",
+        )
     }
 }
 

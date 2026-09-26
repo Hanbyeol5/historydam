@@ -32,7 +32,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -49,15 +52,14 @@ import com.samdori93.yeoksadam.core.designsystem.component.MedallionPortrait
 import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
 import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
 import com.samdori93.yeoksadam.core.designsystem.theme.YeoksadamTheme
-import com.samdori93.yeoksadam.core.domain.model.RecognizedHeritage
+import com.samdori93.yeoksadam.core.domain.model.HeritageVisionResult
 import com.samdori93.yeoksadam.feature.camera.viewmodel.CamPhase
 import com.samdori93.yeoksadam.feature.camera.viewmodel.CameraUiEvent
 import com.samdori93.yeoksadam.feature.camera.viewmodel.CameraUiState
-import kotlin.math.roundToInt
 
 /**
  * 유물/건물 인식 카메라 (목업 3번).
- * 일반 카메라 → 촬영 → 위치 기반으로 국가유산청 API 인식 → 후보 선택 → 실제 해설(설명·이미지·음성).
+ * 일반 카메라 → 촬영 → AI(Gemini) 비전 판별 → 국가유산청 데이터로 해설(음성).
  */
 @Composable
 fun CameraScreen(
@@ -70,6 +72,8 @@ fun CameraScreen(
     val context = LocalContext.current
     val tts = remember { CameraTts(context) }
     DisposableEffect(Unit) { onDispose { tts.shutdown() } }
+    val captureController = remember { CameraCaptureController() }
+    var captureError by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = modifier
@@ -77,7 +81,7 @@ fun CameraScreen(
             .background(Brush.verticalGradient(listOf(Color(0xFF2A2620), Color(0xFF14110D)))),
     ) {
         if (hasCameraPermission) {
-            CameraPreview(modifier = Modifier.fillMaxSize())
+            CameraPreview(controller = captureController, modifier = Modifier.fillMaxSize())
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.12f)))
         } else {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -95,7 +99,7 @@ fun CameraScreen(
             CamIcon(Icons.Filled.Cameraswitch) {}
         }
 
-        // 가운데 뷰파인더(리티클) — 촬영 전/인식 중
+        // 뷰파인더(촬영 전/인식 중)
         if (uiState.phase != CamPhase.RESULT) {
             Box(modifier = Modifier.align(Alignment.Center), contentAlignment = Alignment.Center) {
                 Reticle()
@@ -114,7 +118,7 @@ fun CameraScreen(
             modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            uiState.errorMessage?.takeIf { uiState.phase != CamPhase.RESULT }?.let { msg ->
+            (uiState.errorMessage ?: captureError)?.takeIf { uiState.phase != CamPhase.RESULT }?.let { msg ->
                 Text(
                     msg,
                     color = Color.White,
@@ -130,7 +134,7 @@ fun CameraScreen(
             when (uiState.phase) {
                 CamPhase.PREVIEW -> {
                     Text(
-                        "역사적인 유물·문화재나 건물을 비추고 촬영하세요",
+                        "유적·문화재를 비추고 촬영하면\n주변 국가유산을 찾아드려요",
                         color = Color.White,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
@@ -139,7 +143,14 @@ fun CameraScreen(
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                     )
                     Spacer(Modifier.height(18.dp))
-                    Shutter(enabled = hasCameraPermission) { onEvent(CameraUiEvent.Shutter) }
+                    Shutter(enabled = hasCameraPermission) {
+                        captureError = null
+                        captureController.capture(
+                            context = context,
+                            onJpeg = { onEvent(CameraUiEvent.Recognize(it)) },
+                            onFailure = { captureError = it.message ?: "촬영에 실패했습니다." },
+                        )
+                    }
                 }
 
                 CamPhase.RECOGNIZING -> Spacer(Modifier.height(86.dp))
@@ -150,7 +161,7 @@ fun CameraScreen(
                         tts.stop()
                         onEvent(CameraUiEvent.Select(id))
                     },
-                    onSpeak = { uiState.detail?.description?.takeIf { it.isNotBlank() }?.let(tts::speak) },
+                    onSpeak = { uiState.description?.takeIf { it.isNotBlank() }?.let(tts::speak) },
                     onRetake = {
                         tts.stop()
                         onEvent(CameraUiEvent.Retake)
@@ -168,35 +179,36 @@ private fun ResultPanel(
     onSpeak: () -> Unit,
     onRetake: () -> Unit,
 ) {
-    val header = uiState.detail ?: uiState.selectedCandidate
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        // 인식 태그
-        header?.let {
-            Box(
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 14.dp, vertical = 7.dp),
-            ) {
-                val distance = uiState.selectedCandidate?.let { c -> " · ${formatDistance(c.distanceM)}" }.orEmpty()
-                Text("${it.kind} · ${it.name}$distance", color = Color.White, fontSize = 12.sp)
-            }
-            Spacer(Modifier.height(10.dp))
-        }
-
-        // 주변 국가유산 후보 칩
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        // 인식 태그 (출처 + 명칭 + 확신도)
+        val source = if (uiState.official != null) "국가유산청" else "AI 판별"
+        val confidence = uiState.identification?.confidence?.takeIf { it > 0 }?.let { " · ${it}%" }.orEmpty()
+        Box(
+            modifier = Modifier
+                .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 14.dp, vertical = 7.dp),
         ) {
-            uiState.candidates.forEach { item ->
-                HeritageChip(
-                    name = item.name,
-                    selected = item.id == uiState.selectedId,
-                    onClick = { onSelect(item.id) },
-                )
-            }
+            Text("$source · ${uiState.displayName}$confidence", color = Color.White, fontSize = 12.sp)
         }
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(10.dp))
+
+        // 주변 국가유산 후보(보정용) — 건물/유적(site)일 때만. 유물·인물엔 무관하므로 숨김
+        val cat = uiState.identification?.category.orEmpty()
+        if (uiState.candidates.isNotEmpty() && cat == "site") {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                uiState.candidates.forEach { item ->
+                    HeritageChip(
+                        name = item.name,
+                        selected = item.id == uiState.selectedId,
+                        onClick = { onSelect(item.id) },
+                    )
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
 
         // 해설 카드
         Column(
@@ -205,31 +217,34 @@ private fun ResultPanel(
                 .background(DancheongColors.HanjiCard.copy(alpha = 0.98f), RoundedCornerShape(18.dp))
                 .padding(14.dp),
         ) {
-            val detail = uiState.detail
-            if (detail?.imageUrl != null) {
+            uiState.official?.imageUrl?.let { url ->
                 AsyncImage(
-                    model = detail.imageUrl,
-                    contentDescription = detail.name,
+                    model = url,
+                    contentDescription = uiState.displayName,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth().height(130.dp).background(DancheongColors.HanjiDim, RoundedCornerShape(12.dp)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(130.dp)
+                        .background(DancheongColors.HanjiDim, RoundedCornerShape(12.dp)),
                 )
                 Spacer(Modifier.height(10.dp))
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                MedallionPortrait(portraitUrl = null, name = header?.name ?: "?", size = 34.dp)
+                MedallionPortrait(portraitUrl = null, name = uiState.displayName, size = 34.dp)
                 Spacer(Modifier.width(8.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        header?.name ?: "국가유산",
+                        uiState.displayName,
                         fontFamily = NanumMyeongjo,
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
                         color = DancheongColors.Meok,
                     )
                     val sub = listOfNotNull(
-                        detail?.era?.takeIf { it.isNotBlank() },
-                        detail?.address?.takeIf { it.isNotBlank() } ?: header?.address?.takeIf { it.isNotBlank() },
+                        uiState.identification?.kind?.takeIf { it.isNotBlank() },
+                        (uiState.official?.era ?: uiState.identification?.era)?.takeIf { it.isNotBlank() },
+                        uiState.official?.address?.takeIf { it.isNotBlank() },
                     ).joinToString(" · ")
                     if (sub.isNotBlank()) {
                         Text(sub, fontSize = 11.sp, color = DancheongColors.MeokSoft)
@@ -251,11 +266,11 @@ private fun ResultPanel(
                 uiState.loadingDetail -> Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = DancheongColors.Jujak, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("설명을 불러오는 중…", fontSize = 12.sp, color = DancheongColors.MeokSoft)
+                    Text("공식 정보를 불러오는 중…", fontSize = 12.sp, color = DancheongColors.MeokSoft)
                 }
 
-                detail != null && detail.description.isNotBlank() -> Text(
-                    detail.description,
+                uiState.description != null -> Text(
+                    uiState.description!!,
                     fontSize = 13.sp,
                     lineHeight = 19.sp,
                     color = DancheongColors.Meok,
@@ -270,9 +285,6 @@ private fun ResultPanel(
         }
     }
 }
-
-private fun formatDistance(meters: Float): String =
-    if (meters < 1000f) "${meters.roundToInt()}m" else "%.1fkm".format(meters / 1000f)
 
 @Composable
 private fun SmallButton(
@@ -350,16 +362,13 @@ private fun CameraScreenPreview() {
         CameraScreen(
             uiState = CameraUiState(
                 phase = CamPhase.RESULT,
-                candidates = listOf(
-                    RecognizedHeritage("11_1_11", "서울 숭례문", "崇禮門", "국보", "", "", "서울 중구", "", null, 37.56, 126.97, 120f),
-                    RecognizedHeritage("13_117_11", "경복궁", "景福宮", "사적", "", "", "서울 종로구", "", null, 37.579, 126.977, 1200f),
-                ),
-                selectedId = "11_1_11",
-                detail = RecognizedHeritage(
-                    "11_1_11", "서울 숭례문", "崇禮門", "국보",
-                    "조선 태조 7년(1398)", "유적건조물", "서울 중구 세종대로 40",
-                    "조선시대 한양도성의 정문으로 남쪽에 있어 남대문이라고도 불렀다.",
-                    null, 37.56, 126.97, 120f,
+                identification = HeritageVisionResult(
+                    name = "백자 달항아리",
+                    kind = "도자기",
+                    era = "18세기 조선",
+                    description = "둥근 보름달을 닮은 조선 백자로, 꾸밈없는 형태에 절제된 아름다움이 담겨 있다.",
+                    matchedHeritageId = null,
+                    confidence = 88,
                 ),
             ),
             onEvent = {},

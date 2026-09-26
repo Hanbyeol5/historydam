@@ -1,6 +1,8 @@
 package com.samdori93.yeoksadam.feature.figure.navigation
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavOptions
@@ -8,6 +10,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.toRoute
 import com.samdori93.yeoksadam.feature.figure.ui.AllFiguresScreen
 import com.samdori93.yeoksadam.feature.figure.ui.FigureSheetScreen
+import com.samdori93.yeoksadam.feature.figure.viewmodel.FigureSheetViewModel
 import kotlinx.serialization.Serializable
 
 /** 인물 선택 시트 / 상세 라우트 (figureId 전달). */
@@ -32,6 +35,8 @@ fun NavGraphBuilder.figureScreens(
 ) {
     composable<FigureSheet> { entry ->
         val args = entry.toRoute<FigureSheet>()
+        val viewModel: FigureSheetViewModel = hiltViewModel()
+        LaunchedEffect(args.figureId) { viewModel.onFigureShown(args.figureId) }
         FigureSheetScreen(
             figureId = args.figureId,
             onBack = onBack,
