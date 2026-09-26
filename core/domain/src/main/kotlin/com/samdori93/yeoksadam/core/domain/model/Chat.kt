@@ -15,14 +15,7 @@ data class Citation(
     val excerpt: String,
 )
 
-/** 도감 수집 기록. */
-data class Discovery(
-    val type: DiscoveryType,
-    val refId: String,
-    val discoveredAt: Long,
-)
-
-enum class DiscoveryType { SITE, FIGURE, RELIC }
+// Discovery / DiscoveryType 는 Discovery.kt 로 이동(이미지·명칭 포함 확장판).
 
 /** 위치(위경도) 값 객체. */
 data class LatLng(
