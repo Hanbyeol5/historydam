@@ -19,11 +19,13 @@ object SampleData {
     val sejong = SampleFigure("fig_sejong", "세종대왕", "조선 제4대 국왕", "경복궁", "1.2km", discovered = true)
     val chae = SampleFigure("fig_chae", "채제공", "번암", "수원화성", "30m", discovered = true)
     val jeongjo = SampleFigure("fig_jeongjo", "정조", "조선 제22대 국왕", "창덕궁", "1.8km", discovered = true)
+    val yisunsin = SampleFigure("fig_yisunsin", "이순신", "충무공 · 삼도수군통제사", "한산도", "1.5km", discovered = true)
 
     val figures: List<SampleFigure> = listOf(
         sejong,
         chae,
         jeongjo,
+        yisunsin,
         SampleFigure("fig_gojong", "고종", "조선 제26대 국왕", "덕수궁", "900m", discovered = true),
         SampleFigure("fig_sinsaimdang", "신사임당", "화가 · 시인", "종묘", "2.1km", discovered = true),
         SampleFigure("fig_kang", "강세황", "표암 · 문인화가", "—", "미발견"),
@@ -86,6 +88,7 @@ object SampleData {
         MapPin("fig_jeongjo", "정조", "site_cdg", "창덕궁", 37.582604, 126.991987, "약 1.8km"),
         MapPin("fig_gojong", "고종", "site_dsg", "덕수궁", 37.565804, 126.975144, "약 900m"),
         MapPin("fig_sinsaimdang", "신사임당", "site_jm", "종묘", 37.574202, 126.994359, "약 2.1km"),
+        MapPin("fig_yisunsin", "이순신", "site_hsd", "한산도", 34.7909, 128.4722, "약 1.5km"),
     )
 
     /** 카메라 유물 인식 결과 — 인식된 유물 + 해설 가능한 관련 인물들. */

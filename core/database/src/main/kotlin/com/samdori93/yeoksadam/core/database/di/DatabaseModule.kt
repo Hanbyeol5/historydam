@@ -3,6 +3,7 @@ package com.samdori93.yeoksadam.core.database.di
 import android.content.Context
 import androidx.room.Room
 import com.samdori93.yeoksadam.core.database.YeoksadamDatabase
+import com.samdori93.yeoksadam.core.database.dao.ChatDao
 import com.samdori93.yeoksadam.core.database.dao.FigureDao
 import dagger.Module
 import dagger.Provides
@@ -24,4 +25,7 @@ object DatabaseModule {
 
     @Provides
     fun provideFigureDao(db: YeoksadamDatabase): FigureDao = db.figureDao()
+
+    @Provides
+    fun provideChatDao(db: YeoksadamDatabase): ChatDao = db.chatDao()
 }

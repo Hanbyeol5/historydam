@@ -22,8 +22,7 @@ android {
         buildConfigField(
             "String",
             "API_BASE_URL",
-            value = "\"${secret(key = "API_BASE_URL", default = "http://10.0.2.2:8000/")}\""        )
-            "\"${secret("API_BASE_URL", "https://api.example.com/")}\"",
+            value = "\"${secret(key = "API_BASE_URL", default = "http://10.0.2.2:8000/")}\""
         )
         // Gemini 멀티모달 비전 키 — local.properties 의 GEMINI_API_KEY (커밋 금지)
         buildConfigField(
