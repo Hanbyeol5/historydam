@@ -333,7 +333,8 @@ async def ask_history_figure(request: QuestionRequest):
 """
 
   try:
-    response = model.generate_content(prompt)
+    # 비동기 함수로 교체하여 답변 생성 중에도 서버가 다른 요청을 받을 수 있게 처리
+    response = await model.generate_content_async(prompt) 
     return {
         "question": user_question,
         "answer": response.text,
