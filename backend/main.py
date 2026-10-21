@@ -1,5 +1,6 @@
 import asyncio
 import os
+import pickle
 import re  # HTML 태그 정제용 정규식
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote
@@ -15,7 +16,7 @@ PUBLIC_API_KEY = os.getenv("PUBLIC_API_KEY")
 KDP_API_KEY = os.getenv("KDP_API_KEY")
 
 if not GEMINI_API_KEY:
-  raise ValueError("GEMINI_API_KEY가 .env 파일에 없습니다!")
+    raise ValueError("GEMINI_API_KEY가 .env 파일에 없습니다!")
 
 DECODED_PUBLIC_KEY = (
     unquote(PUBLIC_API_KEY) if PUBLIC_API_KEY else PUBLIC_API_KEY
@@ -26,10 +27,22 @@ model = genai.GenerativeModel("models/gemini-3.8-flash")
 
 app = FastAPI(title="역사담 실시간 다중 API 페르소나 RAG 서버")
 
+# 🤖 학습된 의도 분류 모델 및 벡터라이저 로드
+try:
+    with open("intent_model.pkl", "rb") as f:
+        intent_model = pickle.load(f)
+    with open("vectorizer.pkl", "rb") as f:
+        vectorizer = pickle.load(f)
+    print("🤖 [백엔드] 머신러닝 의도 분류 모델 로드 성공!")
+except Exception as e:
+    print(f"⚠️ [백엔드 경고] 의도 분류 모델 로드 실패: {e} (기본 RAG 모드로 동작)")
+    intent_model = None
+    vectorizer = None
+
 
 class QuestionRequest(BaseModel):
-  figureId: str
-  question: str
+    figureId: str
+    question: str
 
 
 FIGURE_INFO = {
@@ -67,196 +80,211 @@ FIGURE_INFO = {
 
 
 def clean_text(text: str) -> str:
-  """HTML 태그 (<em>, <cm> 등) 및 노이즈 정제 함수"""
-  if not text:
-    return ""
-  cleaned = re.sub(r"<.*?>", "", text)
-  return cleaned.strip()
+    """HTML 태그 (<em>, <cm> 등) 및 노이즈 정제 함수"""
+    if not text:
+        return ""
+    cleaned = re.sub(r"<.*?>", "", text)
+    return cleaned.strip()
+
+
+def get_optimized_query(figure_keyword: str, question: str) -> str:
+    """사용자 질문에서 핵심 키워드를 추출하고 인물 이름과 조합하여 API 검색 쿼리 최적화"""
+    cleaned_q = re.sub(r"[^\w\s]", "", question)
+    words = cleaned_q.split()
+    
+    meaningful_words = [w for w in words if len(w) > 1 and w != figure_keyword][:2]
+    
+    if meaningful_words:
+        optimized = f"{figure_keyword} {' '.join(meaningful_words)}"
+        print(f"🔍 [검색 쿼리 최적화]: '{optimized}'")
+        return optimized
+    
+    return figure_keyword
 
 
 # --- ⚡ 5대 핵심 공공 API 비동기 호출 및 빈 데이터 검증 함수들 ---
 
 
 async def fetch_museum(client: httpx.AsyncClient, keyword: str):
-  """1. 국립중앙박물관 소장품 API"""
-  url = "https://apis.data.go.kr/1371027/openapi/list"
-  params = {
-      "serviceKey": DECODED_PUBLIC_KEY,
-      "pageNo": "1",
-      "numOfRows": "5",
-      "nameKr": keyword,
-  }
-  try:
-    response = await client.get(url, params=params, timeout=5.0)
-    root = ET.fromstring(response.content)
-    contexts = []
-    for item in root.findall(".//item"):
-      item_texts = [
-          clean_text(child.text) for child in item if child.text and child.text.strip()
-      ]
-      if item_texts:
-        contexts.append(
-            f"[출처: 국립중앙박물관 API] {' '.join(item_texts[:3])}"
-        )
+    """1. 국립중앙박물관 소장품 API"""
+    url = "https://apis.data.go.kr/1371027/openapi/list"
+    params = {
+        "serviceKey": DECODED_PUBLIC_KEY,
+        "pageNo": "1",
+        "numOfRows": "5",
+        "nameKr": keyword,
+    }
+    try:
+        response = await client.get(url, params=params, timeout=5.0)
+        root = ET.fromstring(response.content)
+        contexts = []
+        for item in root.findall(".//item"):
+            item_texts = [
+                clean_text(child.text) for child in item if child.text and child.text.strip()
+            ]
+            if item_texts:
+                contexts.append(
+                    f"[출처: 국립중앙박물관 API] {' '.join(item_texts[:3])}"
+                )
 
-    res = contexts[:2]
-    if res:
-      print(f"🏛️ [박물관 API] 성공: 유효 데이터 {len(res)}건 확보")
-    else:
-      print(f"⚠️ [박물관 API] 경고: 검색 결과 데이터가 0건입니다.")
-    return res
-  except Exception as e:
-    print(f"❌ [박물관 API 에러]: {e}")
-    return []
+        res = contexts[:2]
+        if res:
+            print(f"🏛️ [박물관 API] 성공: 유효 데이터 {len(res)}건 확보")
+        else:
+            print(f"⚠️ [박물관 API] 경고: 검색 결과 데이터가 0건입니다.")
+        return res
+    except Exception as e:
+        print(f"❌ [박물관 API 에러]: {e}")
+        return []
 
 
 async def fetch_archives(client: httpx.AsyncClient, keyword: str):
-  """2. 국가기록원 나라기록물 검색 API"""
-  url = "https://apis.data.go.kr/1741050/openapi/searcharc"
-  params = {
-      "serviceKey": DECODED_PUBLIC_KEY,
-      "pageNo": "1",
-      "display": "3",
-      "query": keyword,
-  }
-  try:
-    response = await client.get(url, params=params, timeout=5.0)
-    root = ET.fromstring(response.content)
-    if root.find(".//searchError") is not None:
-      err_msg = (
-          root.find(".//message").text
-          if root.find(".//message") is not None
-          else "에러"
-      )
-      print(f"⚠️ [국가기록원 API] 에러 응답 발생: {err_msg}")
-      return []
+    """2. 국가기록원 나라기록물 검색 API"""
+    url = "https://apis.data.go.kr/1741050/openapi/searcharc"
+    params = {
+        "serviceKey": DECODED_PUBLIC_KEY,
+        "pageNo": "1",
+        "display": "3",
+        "query": keyword,
+    }
+    try:
+        response = await client.get(url, params=params, timeout=5.0)
+        root = ET.fromstring(response.content)
+        if root.find(".//searchError") is not None:
+            err_msg = (
+                root.find(".//message").text
+                if root.find(".//message") is not None
+                else "에러"
+            )
+            print(f"⚠️ [국가기록원 API] 에러 응답 발생: {err_msg}")
+            return []
 
-    contexts = []
-    for item in root.findall(".//item"):
-      title = (
-          clean_text(item.find("title").text)
-          if item.find("title") is not None and item.find("title").text
-          else "기록물"
-      )
-      content = (
-          clean_text(item.find("content").text)
-          if item.find("content") is not None and item.find("content").text
-          else ""
-      )
-      contexts.append(f"[출처: 국가기록원 API] {title}: {content}")
+        contexts = []
+        for item in root.findall(".//item"):
+            title = (
+                clean_text(item.find("title").text)
+                if item.find("title") is not None and item.find("title").text
+                else "기록물"
+            )
+            content = (
+                clean_text(item.find("content").text)
+                if item.find("content") is not None and item.find("content").text
+                else ""
+            )
+            contexts.append(f"[출처: 국가기록원 API] {title}: {content}")
 
-    res = contexts[:2]
-    if res:
-      print(f"📜 [국가기록원 API] 성공: 유효 데이터 {len(res)}건 확보")
-    else:
-      print(f"⚠️ [국가기록원 API] 경고: 검색 결과 데이터가 0건입니다.")
-    return res
-  except Exception as e:
-    print(f"❌ [국가기록원 API 에러]: {e}")
-    return []
+        res = contexts[:2]
+        if res:
+            print(f"📜 [국가기록원 API] 성공: 유효 데이터 {len(res)}건 확보")
+        else:
+            print(f"⚠️ [국가기록원 API] 경고: 검색 결과 데이터가 0건입니다.")
+        return res
+    except Exception as e:
+        print(f"❌ [국가기록원 API 에러]: {e}")
+        return []
 
 
 async def fetch_kdp(client: httpx.AsyncClient, keyword: str):
-  """3. 한국학자료통합플랫폼(KDP) API"""
-  url = "https://kdp.aks.ac.kr/api/search"
-  params = {"key": KDP_API_KEY, "keyword": keyword, "page": 1, "size": 3}
-  try:
-    response = await client.get(url, params=params, timeout=5.0)
-    if response.status_code != 200:
-      print(f"⚠️ [KDP API] HTTP 상태코드 비정상: {response.status_code}")
-      return []
+    """3. 한국학자료통합플랫폼(KDP) API"""
+    url = "https://kdp.aks.ac.kr/api/search"
+    params = {"key": KDP_API_KEY, "keyword": keyword, "page": 1, "size": 3}
+    try:
+        response = await client.get(url, params=params, timeout=5.0)
+        if response.status_code != 200:
+            print(f"⚠️ [KDP API] HTTP 상태코드 비정상: {response.status_code}")
+            return []
 
-    root = ET.fromstring(response.content)
-    contexts = []
-    items = (
-        root.findall(".//item")
-        or root.findall(".//result")
-        or root.findall(".//doc")
-    )
-    for item in items:
-      item_texts = [
-          clean_text(child.text) for child in item if child.text and child.text.strip()
-      ]
-      if item_texts:
-        contexts.append(
-            f"[출처: 한국학자료통합플랫폼(KDP) API] {' '.join(item_texts[:3])}"
+        root = ET.fromstring(response.content)
+        contexts = []
+        items = (
+            root.findall(".//item")
+            or root.findall(".//result")
+            or root.findall(".//doc")
         )
+        for item in items:
+            item_texts = [
+                clean_text(child.text) for child in item if child.text and child.text.strip()
+            ]
+            if item_texts:
+                contexts.append(
+                    f"[출처: 한국학자료통합플랫폼(KDP) API] {' '.join(item_texts[:3])}"
+                )
 
-    res = contexts[:2]
-    if res:
-      print(f"📚 [한국학플랫폼 API] 성공: 유효 데이터 {len(res)}건 확보")
-    else:
-      print(f"⚠️ [한국학플랫폼 API] 경고: 검색 결과 데이터가 0건입니다.")
-    return res
-  except Exception as e:
-    print(f"❌ [한국학플랫폼 API 에러]: {e}")
-    return []
+        res = contexts[:2]
+        if res:
+            print(f"📚 [한국학플랫폼 API] 성공: 유효 데이터 {len(res)}건 확보")
+        else:
+            print(f"⚠️ [한국학플랫폼 API] 경고: 검색 결과 데이터가 0건입니다.")
+        return res
+    except Exception as e:
+        print(f"❌ [한국학플랫폼 API 에러]: {e}")
+        return []
 
 
 async def fetch_dictionary(client: httpx.AsyncClient, keyword: str):
-  """4. 국가유산 지식이음 - 전국고교차사전 API (idx=39)"""
-  url = "http://portal.nrich.go.kr/kor/openapi.do"
-  params = {"idx": "39", "firstIndex": "1", "recordcountperpage": "20"}  # 20건으로 범위 확대
-  try:
-    response = await client.get(url, params=params, timeout=5.0)
-    root = ET.fromstring(response.content)
-    contexts = []
-    for item in root.findall(".//item"):
-      name = (
-          clean_text(item.find("NAME").text)
-          if item.find("NAME") is not None and item.find("NAME").text
-          else ""
-      )
-      content = (
-          clean_text(item.find("CONTENT").text)
-          if item.find("CONTENT") is not None and item.find("CONTENT").text
-          else ""
-      )
-      if keyword in name or keyword in content:
-        contexts.append(f"[출처: 고교차사전 API] {name}: {content[:100]}")
+    """4. 국가유산 지식이음 - 전국고교차사전 API (idx=39)"""
+    url = "http://portal.nrich.go.kr/kor/openapi.do"
+    params = {"idx": "39", "firstIndex": "1", "recordcountperpage": "20"}  # 20건으로 범위 확대
+    try:
+        response = await client.get(url, params=params, timeout=5.0)
+        root = ET.fromstring(response.content)
+        contexts = []
+        for item in root.findall(".//item"):
+            name = (
+                clean_text(item.find("NAME").text)
+                if item.find("NAME") is not None and item.find("NAME").text
+                else ""
+            )
+            content = (
+                clean_text(item.find("CONTENT").text)
+                if item.find("CONTENT") is not None and item.find("CONTENT").text
+                else ""
+            )
+            if keyword in name or keyword in content:
+                contexts.append(f"[출처: 고교차사전 API] {name}: {content[:100]}")
 
-    res = contexts[:2]
-    if res:
-      print(f"📖 [고교차사전 API] 성공: 유효 데이터 {len(res)}건 확보")
-    else:
-      print(f"⚠️ [고교차사전 API] 경고: 검색어 매칭 데이터 0건")
-    return res
-  except Exception as e:
-    print(f"❌ [고교차사전 API 에러]: {e}")
-    return []
+        res = contexts[:2]
+        if res:
+            print(f"📖 [고교차사전 API] 성공: 유효 데이터 {len(res)}건 확보")
+        else:
+            print(f"⚠️ [고교차사전 API] 경고: 검색어 매칭 데이터 0건")
+        return res
+    except Exception as e:
+        print(f"❌ [고교차사전 API 에러]: {e}")
+        return []
 
 
 async def fetch_diary(client: httpx.AsyncClient, keyword: str):
-  """5. 국가유산 지식이음 - 조선시대 지도일기 API (idx=205)"""
-  url = "http://portal.nrich.go.kr/kor/openapi.do"
-  params = {"idx": "205", "firstIndex": "1", "recordcountperpage": "20"}  # 20건으로 범위 확대
-  try:
-    response = await client.get(url, params=params, timeout=5.0)
-    root = ET.fromstring(response.content)
-    contexts = []
-    for item in root.findall(".//item"):
-      title = (
-          clean_text(item.find("TITLE_KOR").text)
-          if item.find("TITLE_KOR") is not None and item.find("TITLE_KOR").text
-          else ""
-      )
-      content = (
-          clean_text(item.find("DCONTENT").text)
-          if item.find("DCONTENT") is not None and item.find("DCONTENT").text
-          else ""
-      )
-      if keyword in title or keyword in content or not keyword:
-        contexts.append(f"[출처: 조선시대 지도일기 API] {title}: {content[:100]}")
+    """5. 국가유산 지식이음 - 조선시대 지도일기 API (idx=205)"""
+    url = "http://portal.nrich.go.kr/kor/openapi.do"
+    params = {"idx": "205", "firstIndex": "1", "recordcountperpage": "20"}  # 20건으로 범위 확대
+    try:
+        response = await client.get(url, params=params, timeout=5.0)
+        root = ET.fromstring(response.content)
+        contexts = []
+        for item in root.findall(".//item"):
+            title = (
+                clean_text(item.find("TITLE_KOR").text)
+                if item.find("TITLE_KOR") is not None and item.find("TITLE_KOR").text
+                else ""
+            )
+            content = (
+                clean_text(item.find("DCONTENT").text)
+                if item.find("DCONTENT") is not None and item.find("DCONTENT").text
+                else ""
+            )
+            if keyword in title or keyword in content or not keyword:
+                contexts.append(f"[출처: 조선시대 지도일기 API] {title}: {content[:100]}")
 
-    res = contexts[:2]
-    if res:
-      print(f"🗺️ [지도일기 API] 성공: 유효 데이터 {len(res)}건 확보")
-    else:
-      print(f"⚠️ [지도일기 API] 경고: 검색어 매칭 데이터 0건")
-    return res
-  except Exception as e:
-    print(f"❌ [지도일기 API 에러]: {e}")
-    return []
+        res = contexts[:2]
+        if res:
+            print(f"🗺️ [지도일기 API] 성공: 유효 데이터 {len(res)}건 확보")
+        else:
+            print(f"⚠️ [지도일기 API] 경고: 검색어 매칭 데이터 0건")
+        return res
+    except Exception as e:
+        print(f"❌ [지도일기 API 에러]: {e}")
+        return []
 
 
 # --- 🚀 핵심 RAG API 엔드포인트 ---
@@ -264,57 +292,73 @@ async def fetch_diary(client: httpx.AsyncClient, keyword: str):
 
 @app.post("/v1/chat")
 async def ask_history_figure(request: QuestionRequest):
-  figure_id = request.figureId
-  user_question = request.question
+    figure_id = request.figureId
+    user_question = request.question
 
-  info = FIGURE_INFO.get(
-      figure_id,
-      {
-          "name": figure_id,
-          "era": "역사 속",
-          "max_year": 2026,
-          "keyword": figure_id,
-          "persona": f"역사적 인물 '{figure_id}'이다. 품격 있는 어조로 답하라.",
-      },
-  )
-
-  figure_name = info["name"]
-  figure_era = info["era"]
-  max_year = info["max_year"]
-  search_keyword = info["keyword"]
-  character_persona = info["persona"]
-
-  print("\n" + "=" * 65)
-  print(
-      f"🚀 [새 요청 수신] 인물: {figure_name} ({figure_era}) | 검색어:"
-      f" '{search_keyword}' | 질문: '{user_question}'"
-  )
-  print("=" * 65)
-
-  # ⚡ 5개 정예 공공 API 실시간 비동기 병렬 호출
-  async with httpx.AsyncClient() as client:
-    results = await asyncio.gather(
-        fetch_museum(client, search_keyword),
-        fetch_archives(client, search_keyword),
-        fetch_kdp(client, search_keyword),
-        fetch_dictionary(client, search_keyword),
-        fetch_diary(client, search_keyword),
+    info = FIGURE_INFO.get(
+        figure_id,
+        {
+            "name": figure_id,
+            "era": "역사 속",
+            "max_year": 2026,
+            "keyword": figure_id,
+            "persona": f"역사적 인물 '{figure_id}'이다. 품격 있는 어조로 답하라.",
+        },
     )
 
-  all_contexts = [item for sublist in results for item in sublist]
-  print("-" * 65)
-  print(
-      f"📊 [종합 결과] 총 유효 사료 데이터: {len(all_contexts)}건 수집 완료"
-  )
-  print("=" * 65 + "\n")
+    figure_name = info["name"]
+    figure_era = info["era"]
+    max_year = info["max_year"]
+    base_keyword = info["keyword"]
+    search_keyword = get_optimized_query(base_keyword, user_question)
+    character_persona = info["persona"]
 
-  context_text = (
-      "\n".join(all_contexts)
-      if all_contexts
-      else f"'{figure_name}'와 관련된 직접적인 공공 API 기록을 찾지 못했습니다."
-  )
+    print("\n" + "=" * 65)
+    print(
+        f"🚀 [새 요청 수신] 인물: {figure_name} ({figure_era}) | 질문:"
+        f" '{user_question}'"
+    )
 
-  prompt = f"""
+    # 🧠 1단계: 머신러닝 모델로 사용자 질의 의도 분류 (0: 단순 대화, 1: 역사 사료 질의)
+    is_history_intent = True
+    if intent_model and vectorizer:
+        X_input = vectorizer.transform([user_question])
+        pred = intent_model.predict(X_input)[0]
+        if pred == 0:
+            is_history_intent = False
+            print("💬 [의도 분류 결과]: 단순 인사/일반 대화 (API 호출 생략)")
+        else:
+            print("📜 [의도 분류 결과]: 역사 사료 질의 (5대 API RAG 구동)")
+    print("=" * 65)
+
+    # ⚡ 2단계: 의도가 역사 질의일 때만 5대 공공 API 비동기 병렬 호출 수행!
+    all_contexts = []
+    if is_history_intent:
+        async with httpx.AsyncClient() as client:
+            results = await asyncio.gather(
+                fetch_museum(client, search_keyword),
+                fetch_archives(client, search_keyword),
+                fetch_kdp(client, search_keyword),
+                fetch_dictionary(client, search_keyword),
+                fetch_diary(client, search_keyword),
+            )
+        all_contexts = [item for sublist in results for item in sublist]
+        print(f"📊 [종합 결과] 총 유효 사료 데이터: {len(all_contexts)}건 수집 완료")
+    else:
+        print("⚡ [패스] 단순 대화이므로 API 조회를 생략하고 페르소나 답변으로 직행합니다.")
+
+    print("=" * 65 + "\n")
+
+    context_text = (
+        "\n".join(all_contexts)
+        if all_contexts
+        else (
+            f"'{figure_name}'와 관련된 직접적인 공공 API 기록을 찾지 못했으나,"
+            " 인물의 성향에 맞춰 지혜롭게 답하라."
+        )
+    )
+
+    prompt = f"""
 너는 {figure_era}시대를 살다 간 역사적 인물 '{figure_name}'이다. 
 [상세 신분 및 말투 지침]
 {character_persona}
@@ -332,13 +376,12 @@ async def ask_history_figure(request: QuestionRequest):
 {user_question}
 """
 
-  try:
-    # 비동기 함수로 교체하여 답변 생성 중에도 서버가 다른 요청을 받을 수 있게 처리
-    response = await model.generate_content_async(prompt) 
-    return {
-        "question": user_question,
-        "answer": response.text,
-        "referenced_data": all_contexts,
-    }
-  except Exception as e:
-    raise HTTPException(status_code=500, detail=str(e))
+    try:
+        response = await model.generate_content_async(prompt)
+        return {
+            "question": user_question,
+            "answer": response.text,
+            "referenced_data": all_contexts,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
