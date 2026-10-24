@@ -1,4 +1,4 @@
-package com.samdori93.yeoksadam.core.data.rag
+package com.samdori93.yeoksadam.core.backend
 
 import com.samdori93.yeoksadam.core.domain.model.Figure
 import kotlinx.serialization.Serializable

@@ -2,15 +2,13 @@
 # Android SDK 위치 (Android Studio 가 자동 설정)
 sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk
 
-# 백엔드 / 외부 키
-API_BASE_URL=https://api.example.com/
+# 외부 키
 # 네이버 클라우드 플랫폼(NCP) → Maps → Mobile Dynamic Map 의 Client ID
 NAVER_MAP_CLIENT_ID=your_ncp_map_client_id
 GEOSPATIAL_API_KEY=your_arcore_geospatial_key
 
 # 인물 대화 「백엔드 RAG」(기본 방식) — backend/.env 와 같은 값
 # Gemini: https://aistudio.google.com/apikey  (없으면 대화에서 「Gemini 키가 없어요」, 메뉴→설정→「기본」으로 바꾸면 키 없이 대화)
-#         카메라 유물 인식(GeminiVision)도 이 키를 쓴다
 GEMINI_API_KEY=
 # 공공데이터포털(data.go.kr) 인증키 — 국립중앙박물관 소장품 · 국가기록원 나라기록물 (없으면 이 두 곳만 빠짐)
 PUBLIC_API_KEY=

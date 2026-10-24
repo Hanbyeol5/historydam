@@ -4,7 +4,6 @@ import com.samdori93.yeoksadam.core.common.result.Result
 import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.NearbyFigure
 import com.samdori93.yeoksadam.core.domain.model.NearbySite
-import com.samdori93.yeoksadam.core.domain.model.SiteDetail
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.LocationRepository
 import javax.inject.Inject
@@ -58,11 +57,4 @@ class GetNearbySitesUseCase @Inject constructor(
 ) {
     suspend operator fun invoke(origin: com.samdori93.yeoksadam.core.domain.model.LatLng, radiusM: Int): List<NearbySite> =
         catalog.nearbySites(origin, radiusM)
-}
-
-/** 유적 상세 (설명·사진). */
-class GetSiteDetailUseCase @Inject constructor(
-    private val catalog: CatalogRepository,
-) {
-    suspend operator fun invoke(siteId: String): Result<SiteDetail> = catalog.siteDetail(siteId)
 }

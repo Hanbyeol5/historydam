@@ -40,6 +40,7 @@ include(":core:database")
 include(":core:datastore")
 include(":core:domain")
 include(":core:data")
+include(":core:backend")
 
 // feature
 include(":feature:home")

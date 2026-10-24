@@ -3,7 +3,6 @@ package com.samdori93.yeoksadam.core.network.di
 import android.content.Context
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import com.samdori93.yeoksadam.core.network.BuildConfig
-import com.samdori93.yeoksadam.core.network.api.YeoksadamApi
 import com.samdori93.yeoksadam.core.network.catalog.CatalogApi
 import com.samdori93.yeoksadam.core.network.worker.AppKeyInterceptor
 import com.samdori93.yeoksadam.core.network.worker.WorkerApi
@@ -56,11 +55,6 @@ object NetworkModule {
         .client(client)
         .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
         .build()
-
-    @Provides
-    @Singleton
-    fun provideYeoksadamApi(client: OkHttpClient, json: Json): YeoksadamApi =
-        retrofit(BuildConfig.API_BASE_URL, client, json).create(YeoksadamApi::class.java)
 
     @Provides
     @Singleton

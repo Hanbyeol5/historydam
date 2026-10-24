@@ -1,4 +1,4 @@
-package com.samdori93.yeoksadam.core.data.rag
+package com.samdori93.yeoksadam.core.backend
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json

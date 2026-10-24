@@ -12,6 +12,7 @@ dependencies {
     api(project(":core:domain"))
     implementation(project(":core:common"))
     implementation(project(":core:network"))
+    implementation(project(":core:backend"))
     implementation(project(":core:database"))
     implementation(project(":core:datastore"))
 

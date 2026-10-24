@@ -1,6 +1,6 @@
-package com.samdori93.yeoksadam.core.network.rag
+package com.samdori93.yeoksadam.core.backend.source
 
-import com.samdori93.yeoksadam.core.network.BuildConfig
+import com.samdori93.yeoksadam.core.backend.BuildConfig
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject

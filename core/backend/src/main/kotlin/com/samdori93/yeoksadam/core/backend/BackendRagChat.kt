@@ -1,4 +1,4 @@
-package com.samdori93.yeoksadam.core.data.rag
+package com.samdori93.yeoksadam.core.backend
 
 import android.content.Context
 import com.samdori93.yeoksadam.core.common.dispatcher.DispatcherProvider
@@ -9,8 +9,8 @@ import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
-import com.samdori93.yeoksadam.core.network.rag.GeminiTextDataSource
-import com.samdori93.yeoksadam.core.network.rag.PublicArchiveDataSource
+import com.samdori93.yeoksadam.core.backend.source.GeminiTextDataSource
+import com.samdori93.yeoksadam.core.backend.source.PublicArchiveDataSource
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll

@@ -19,25 +19,11 @@ android {
     buildFeatures { buildConfig = true }
 
     defaultConfig {
-        buildConfigField(
-            "String",
-            "API_BASE_URL",
-            value = "\"${secret(key = "API_BASE_URL", default = "http://10.0.2.2:8000/")}\""
-        )
         // 역사담 웹앱 데이터(유적·인물·초상)와 대화·음성·인식 서버 — 웹앱과 같은 것을 쓴다
         buildConfigField("String", "CATALOG_BASE_URL", "\"${secret("CATALOG_BASE_URL", "https://samcho93.github.io/arHeritage/")}\"")
         buildConfigField("String", "WORKER_BASE_URL", "\"${secret("WORKER_BASE_URL", "https://yeoksadam-api.samdori93.workers.dev/")}\"")
         // Worker 의 APP_KEYS 와 같은 값 (비밀값 아님 — 웹앱의 Origin 확인과 같은 수준)
         buildConfigField("String", "APP_KEY", "\"${secret("APP_KEY", "historydam-android-v1")}\"")
-        // Gemini 멀티모달 비전 키 — local.properties 의 GEMINI_API_KEY (커밋 금지)
-        buildConfigField(
-            "String",
-            "GEMINI_API_KEY",
-            "\"${secret("GEMINI_API_KEY", "")}\"",
-        )
-        // 백엔드 RAG 의 공공 API 키 (backend/.env 와 같은 값) — local.properties (커밋 금지)
-        buildConfigField("String", "PUBLIC_API_KEY", "\"${secret("PUBLIC_API_KEY", "")}\"")
-        buildConfigField("String", "KDP_API_KEY", "\"${secret("KDP_API_KEY", "")}\"")
     }
 }
 

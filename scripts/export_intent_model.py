@@ -3,8 +3,8 @@ backend/ 의 의도 분류 모델(vectorizer.pkl + intent_model.pkl)을 앱이 �
 
   python scripts/export_intent_model.py
 
-- core/data/src/main/assets/intent_model.json  : 앱이 쓰는 모델 값
-- core/data/src/test/resources/intent_cases.json : 파이썬 예측값 (앱 단위 테스트가 같은 값을 내는지 비교)
+- core/backend/src/main/assets/intent_model.json  : 앱이 쓰는 모델 값
+- core/backend/src/test/resources/intent_cases.json : 파이썬 예측값 (앱 단위 테스트가 같은 값을 내는지 비교)
 
 backend/train_intent.py 로 모델을 다시 학습했으면 이 스크립트를 다시 돌린다.
 """
@@ -35,7 +35,7 @@ out = {
     "coef": [float(x) for x in model.coef_[0]],
     "intercept": float(model.intercept_[0]),
 }
-asset = ROOT / "core/data/src/main/assets/intent_model.json"
+asset = ROOT / "core/backend/src/main/assets/intent_model.json"
 asset.parent.mkdir(parents=True, exist_ok=True)
 asset.write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
 
@@ -50,7 +50,7 @@ cases = [
     {"text": t, "label": int(p), "score": float(s)}
     for t, p, s in zip(CASES, model.predict(X), model.decision_function(X))
 ]
-test_res = ROOT / "core/data/src/test/resources/intent_cases.json"
+test_res = ROOT / "core/backend/src/test/resources/intent_cases.json"
 test_res.parent.mkdir(parents=True, exist_ok=True)
 test_res.write_text(json.dumps(cases, ensure_ascii=False, indent=1), encoding="utf-8")
 print(f"vocabulary {len(out['vocabulary'])} → {asset}")

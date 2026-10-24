@@ -2,7 +2,7 @@ package com.samdori93.yeoksadam.core.data.repository
 
 import com.samdori93.yeoksadam.core.common.error.AppError
 import com.samdori93.yeoksadam.core.common.result.Result
-import com.samdori93.yeoksadam.core.data.rag.BackendRagChat
+import com.samdori93.yeoksadam.core.backend.BackendRagChat
 import com.samdori93.yeoksadam.core.database.dao.ChatDao
 import com.samdori93.yeoksadam.core.database.entity.ChatMessageEntity
 import com.samdori93.yeoksadam.core.domain.model.ChatMessage
