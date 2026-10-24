@@ -29,17 +29,22 @@ fun CameraBackground(modifier: Modifier = Modifier) {
     }
     DisposableEffect(lifecycleOwner) {
         val future = ProcessCameraProvider.getInstance(context)
+        val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
         var provider: ProcessCameraProvider? = null
+        var disposed = false
         future.addListener({
+            if (disposed) return@addListener
             provider = future.get().also { p ->
-                val preview = Preview.Builder().build().also { it.surfaceProvider = previewView.surfaceProvider }
-                runCatching {
-                    p.unbindAll()
-                    p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview)
-                }
+                // 이 화면의 Preview 만 이 화면 수명에 묶는다. unbindAll 은 쓰지 않는다:
+                // 화면이 바뀔 때 새 화면이 먼저 그려지고 옛 화면이 나중에 정리되므로,
+                // 전부 끊으면 새 화면(AR ↔ 대면 대화)의 카메라까지 끊겨 영상이 멈춘다.
+                runCatching { p.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview) }
             }
         }, ContextCompat.getMainExecutor(context))
-        onDispose { provider?.unbindAll() }
+        onDispose {
+            disposed = true
+            provider?.unbind(preview)
+        }
     }
     AndroidView(factory = { previewView }, modifier = modifier)
 }

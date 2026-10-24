@@ -5,7 +5,6 @@ import com.samdori93.yeoksadam.core.common.result.getOrNull
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.LocationRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
@@ -27,7 +26,7 @@ class GeofenceSync @Inject constructor(
         val figureAt = HashMap<String, String>()
         figures.forEach { f -> f.relatedSiteIds.forEach { figureAt.putIfAbsent(it, f.name) } }
 
-        val here = location.observeLocation().first()
+        val here = location.currentLocation()
         val figureSites = figureAt.keys.mapNotNull { catalog.site(it) }
         val near = catalog.nearbySites(here, NEAR_RADIUS_M).map { it.site }.filter { it.id !in figureAt }
         val sites = (figureSites + near).take(GeofenceManager.MAX_FENCES).map {

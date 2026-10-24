@@ -18,7 +18,9 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 
 /**
@@ -35,6 +37,11 @@ class LocationRepositoryImpl @Inject constructor(
         emit(DEFAULT_LOCATION)
         while (!hasLocationPermission()) delay(PERMISSION_POLL_MS)
         emitAll(updates())
+    }
+
+    override suspend fun currentLocation(): LatLng {
+        if (!hasLocationPermission()) return DEFAULT_LOCATION
+        return withTimeoutOrNull(CURRENT_TIMEOUT_MS) { updates().first() } ?: DEFAULT_LOCATION
     }
 
     @SuppressLint("MissingPermission")
@@ -66,6 +73,7 @@ class LocationRepositoryImpl @Inject constructor(
         const val UPDATE_INTERVAL_MS = 10_000L
         const val MIN_UPDATE_INTERVAL_MS = 5_000L
         const val PERMISSION_POLL_MS = 1_500L
+        const val CURRENT_TIMEOUT_MS = 5_000L
 
         /** 수원 화성행궁 — 측위 불가 시 데모 기본 위치 (시범 지역 경기도, 웹앱과 같음). */
         val DEFAULT_LOCATION = LatLng(37.2818, 127.0137)

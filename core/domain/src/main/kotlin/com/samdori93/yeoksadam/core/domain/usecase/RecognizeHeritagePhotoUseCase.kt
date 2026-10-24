@@ -60,7 +60,7 @@ class RecognizeHeritagePhotoUseCase @Inject constructor(
     private suspend fun currentLocation(): LatLng =
         withTimeoutOrNull(LOCATION_TIMEOUT_MS) {
             locationRepository.observeLocation().drop(1).first()
-        } ?: locationRepository.observeLocation().first()
+        } ?: locationRepository.currentLocation()
 
     private companion object {
         const val CANDIDATE_LIMIT = 8

@@ -7,7 +7,6 @@ import com.samdori93.yeoksadam.core.domain.model.NearbySite
 import com.samdori93.yeoksadam.core.domain.model.SiteDetail
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.LocationRepository
-import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /** 인물 한 명 + 지금 위치에서 가장 가까운 관련 유적 (인물 시트·대화 화면). */
@@ -16,7 +15,7 @@ class GetFigureWithSiteUseCase @Inject constructor(
     private val location: LocationRepository,
 ) {
     suspend operator fun invoke(figureId: String): NearbyFigure? {
-        val here = location.observeLocation().first()
+        val here = location.currentLocation()
         // 역사 인물이 없는 유적은 해설사가 안내한다 ("guide:<유적 id>", 서버도 같은 규칙)
         if (figureId.startsWith(GUIDE_PREFIX)) {
             val site = catalog.site(figureId.removePrefix(GUIDE_PREFIX)) ?: return null
@@ -47,7 +46,7 @@ class GetAllFiguresUseCase @Inject constructor(
     private val location: LocationRepository,
 ) {
     suspend operator fun invoke(): List<NearbyFigure> {
-        val here = location.observeLocation().first()
+        val here = location.currentLocation()
         val figures = (catalog.figures() as? Result.Success)?.data.orEmpty()
         return figures.mapNotNull { catalog.nearestSiteOf(it, here) }
     }

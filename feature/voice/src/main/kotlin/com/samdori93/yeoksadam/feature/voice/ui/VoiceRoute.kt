@@ -19,6 +19,7 @@ import com.samdori93.yeoksadam.feature.voice.viewmodel.VoiceViewModel
 
 @Composable
 fun VoiceRoute(
+    portrait: Boolean,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     viewModel: VoiceViewModel = hiltViewModel(),
@@ -34,16 +35,31 @@ fun VoiceRoute(
         hasMic = ok
         if (ok) viewModel.onMic() else viewModel.onPermissionDenied()
     }
-    LaunchedEffect(Unit) { if (!hasCamera) cameraLauncher.launch(Manifest.permission.CAMERA) }
+    val onMic = { if (hasMic) viewModel.onMic() else micLauncher.launch(Manifest.permission.RECORD_AUDIO) }
 
-    VoiceScreen(
-        state = state,
-        hasCamera = hasCamera,
-        onMic = { if (hasMic) viewModel.onMic() else micLauncher.launch(Manifest.permission.RECORD_AUDIO) },
-        onType = viewModel::onType,
-        onMute = viewModel::onMute,
-        onReset = viewModel::onReset,
-        onBack = onBack,
-        modifier = modifier,
-    )
+    if (portrait) {
+        // 챗봇에서 전환한 초상화 대화 — 카메라 없음
+        VoicePortraitScreen(
+            state = state,
+            onMic = onMic,
+            onType = viewModel::onType,
+            onMute = viewModel::onMute,
+            onReset = viewModel::onReset,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    } else {
+        // 인물 시트·지도·AR 에서 들어온 AR 대면 대화 — 후면 카메라 위 인물
+        LaunchedEffect(Unit) { if (!hasCamera) cameraLauncher.launch(Manifest.permission.CAMERA) }
+        VoiceScreen(
+            state = state,
+            hasCamera = hasCamera,
+            onMic = onMic,
+            onType = viewModel::onType,
+            onMute = viewModel::onMute,
+            onReset = viewModel::onReset,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
 }

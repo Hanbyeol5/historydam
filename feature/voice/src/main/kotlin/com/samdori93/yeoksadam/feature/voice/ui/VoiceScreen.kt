@@ -98,8 +98,6 @@ fun VoiceScreen(
     val orientation by rememberCameraOrientation()
     var anchor by remember { mutableFloatStateOf(Float.NaN) }
     if (anchor.isNaN() && orientation.available) anchor = orientation.heading
-    var typing by remember { mutableStateOf(false) }
-    var draft by remember { mutableStateOf("") }
     val figure = state.figure?.figure
 
     BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color(0xFF1A140F))) {
@@ -126,32 +124,7 @@ fun VoiceScreen(
             Modifier.fillMaxWidth().height(140.dp)
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))),
         )
-        Row(
-            modifier = Modifier.statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RoundIcon(Icons.Filled.Home, "뒤로", onBack)
-            Spacer(Modifier.width(8.dp))
-            Row(
-                modifier = Modifier
-                    .weight(1f)
-                    .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text("● LIVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.background(DancheongColors.Jujak, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
-                Text(figure?.name ?: "…", color = Color.White, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text(figure?.title.orEmpty(), color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
-                state.modeBadge?.let {
-                    Text(it, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.background(DancheongColors.Cheongnok, RoundedCornerShape(6.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            RoundIcon(if (state.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, "음성 끄기", onMute)
-        }
+        VoiceTopBar(state, onBack, onMute)
 
         // 화면 밖으로 밀려났을 때 안내
         if (outOfView && figure != null) {
@@ -167,80 +140,136 @@ fun VoiceScreen(
             )
         }
 
-        // 자막 (라이브 방송형 — 배경 없이 그림자만)
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
-                .navigationBarsPadding()
-                // 글 입력 키보드가 올라오면 자막·입력창을 키보드 위로
-                .imePadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+        // 자막 · 입력 · 마이크
+        VoiceBottomPanel(
+            state = state,
+            figureName = figure?.name ?: "",
+            onMic = onMic,
+            onType = onType,
+            onReset = onReset,
+            modifier = Modifier.align(Alignment.BottomCenter),
         ) {
-            Captions(state, figure?.name ?: "")
-            state.notice?.let {
-                Text(it, color = DancheongColors.HwangtoLight, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+            // 인물을 정면으로 다시 부르기
+            RoundIcon(Icons.Filled.Refresh, "정면으로 부르기") { if (orientation.available) anchor = orientation.heading }
+        }
+    }
+}
+
+/** 상단바 — 홈 · 인물 이름 · 음성 끄기. AR 대면 대화와 초상화 대화가 함께 쓴다. */
+@Composable
+internal fun VoiceTopBar(state: VoiceUiState, onBack: () -> Unit, onMute: () -> Unit, modifier: Modifier = Modifier) {
+    val figure = state.figure?.figure
+    Row(
+        modifier = modifier.statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp).fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RoundIcon(Icons.Filled.Home, "뒤로", onBack)
+        Spacer(Modifier.width(8.dp))
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text("● LIVE", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(DancheongColors.Jujak, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
+            Text(figure?.name ?: "…", color = Color.White, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text(figure?.title.orEmpty(), color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
+            state.modeBadge?.let {
+                Text(it, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.background(DancheongColors.Cheongnok, RoundedCornerShape(6.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
             }
-            if (state.resumed && state.status == VoiceStatus.IDLE) {
-                Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                    Text("↑ 지난 대화를 이어 갑니다  ", color = Color.White.copy(alpha = 0.8f), fontSize = 11.5.sp)
-                    Text("새로 시작", color = Color.White, fontSize = 11.5.sp,
-                        modifier = Modifier.border(1.dp, DancheongColors.HwangtoLight, RoundedCornerShape(12.dp)).clickable(onClick = onReset).padding(horizontal = 10.dp, vertical = 3.dp))
-                }
+        }
+        Spacer(Modifier.width(8.dp))
+        RoundIcon(if (state.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, "음성 끄기", onMute)
+    }
+}
+
+/** 자막 · 지난 대화 안내 · 상태 · 글 입력 · 마이크 — AR 대면 대화와 초상화 대화가 함께 쓴다. [trailing] 은 마이크 오른쪽 자리. */
+@Composable
+internal fun VoiceBottomPanel(
+    state: VoiceUiState,
+    figureName: String,
+    onMic: () -> Unit,
+    onType: (String) -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit,
+) {
+    var typing by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.6f))))
+            .navigationBarsPadding()
+            // 글 입력 키보드가 올라오면 자막·입력창을 키보드 위로
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Captions(state, figureName)
+        state.notice?.let {
+            Text(it, color = DancheongColors.HwangtoLight, fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp).fillMaxWidth(), textAlign = TextAlign.Center)
+        }
+        if (state.resumed && state.status == VoiceStatus.IDLE) {
+            Row(Modifier.fillMaxWidth().padding(top = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                Text("↑ 지난 대화를 이어 갑니다  ", color = Color.White.copy(alpha = 0.8f), fontSize = 11.5.sp)
+                Text("새로 시작", color = Color.White, fontSize = 11.5.sp,
+                    modifier = Modifier.border(1.dp, DancheongColors.HwangtoLight, RoundedCornerShape(12.dp)).clickable(onClick = onReset).padding(horizontal = 10.dp, vertical = 3.dp))
             }
-            Text(
-                statusText(state.status, state.conversing),
-                color = DancheongColors.HwangtoLight,
-                fontSize = 12.sp,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                textAlign = TextAlign.Center,
-            )
-            if (typing) {
-                val focus = remember { FocusRequester() }
-                LaunchedEffect(Unit) { focus.requestFocus() }
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                        .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(24.dp)).padding(start = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    BasicTextField(
-                        value = draft,
-                        onValueChange = { draft = it },
-                        singleLine = true,
-                        textStyle = TextStyle(fontSize = 15.sp, color = DancheongColors.Meok),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                        keyboardActions = KeyboardActions(onSend = { onType(draft); draft = "" }),
-                        modifier = Modifier.weight(1f).focusRequester(focus),
-                        decorationBox = { inner ->
-                            if (draft.isEmpty()) Text("말 대신 글로 여쭈어 보세요…", color = DancheongColors.MeokSoft, fontSize = 15.sp)
-                            inner()
-                        },
-                    )
-                    Box(
-                        Modifier.padding(4.dp).size(40.dp).background(DancheongColors.Jujak, CircleShape)
-                            .clickable { onType(draft); draft = "" },
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.AutoMirrored.Filled.Send, "보내기", tint = Color.White, modifier = Modifier.size(18.dp)) }
-                }
-            }
+        }
+        Text(
+            statusText(state.status, state.conversing),
+            color = DancheongColors.HwangtoLight,
+            fontSize = 12.sp,
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            textAlign = TextAlign.Center,
+        )
+        if (typing) {
+            val focus = remember { FocusRequester() }
+            LaunchedEffect(Unit) { focus.requestFocus() }
             Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    .background(Color.White.copy(alpha = 0.92f), RoundedCornerShape(24.dp)).padding(start = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                RoundIcon(Icons.Filled.Keyboard, "글자로 입력") { typing = !typing }
-                val active = state.conversing || state.status == VoiceStatus.LISTENING
+                BasicTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    singleLine = true,
+                    textStyle = TextStyle(fontSize = 15.sp, color = DancheongColors.Meok),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+                    keyboardActions = KeyboardActions(onSend = { onType(draft); draft = "" }),
+                    modifier = Modifier.weight(1f).focusRequester(focus),
+                    decorationBox = { inner ->
+                        if (draft.isEmpty()) Text("말 대신 글로 여쭈어 보세요…", color = DancheongColors.MeokSoft, fontSize = 15.sp)
+                        inner()
+                    },
+                )
                 Box(
-                    modifier = Modifier.size(72.dp).background(if (active) DancheongColors.JujakDeep else DancheongColors.Jujak, CircleShape)
-                        .border(3.dp, Color.White.copy(alpha = 0.6f), CircleShape).clickable(onClick = onMic),
+                    Modifier.padding(4.dp).size(40.dp).background(DancheongColors.Jujak, CircleShape)
+                        .clickable { onType(draft); draft = "" },
                     contentAlignment = Alignment.Center,
-                ) {
-                    Icon(if (active) Icons.Filled.Stop else Icons.Filled.Mic, "대화", tint = Color.White, modifier = Modifier.size(32.dp))
-                }
-                // 인물을 정면으로 다시 부르기
-                RoundIcon(Icons.Filled.Refresh, "정면으로 부르기") { if (orientation.available) anchor = orientation.heading }
+                ) { Icon(Icons.AutoMirrored.Filled.Send, "보내기", tint = Color.White, modifier = Modifier.size(18.dp)) }
             }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RoundIcon(Icons.Filled.Keyboard, "글자로 입력") { typing = !typing }
+            val active = state.conversing || state.status == VoiceStatus.LISTENING
+            Box(
+                modifier = Modifier.size(72.dp).background(if (active) DancheongColors.JujakDeep else DancheongColors.Jujak, CircleShape)
+                    .border(3.dp, Color.White.copy(alpha = 0.6f), CircleShape).clickable(onClick = onMic),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(if (active) Icons.Filled.Stop else Icons.Filled.Mic, "대화", tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+            trailing()
         }
     }
 }
@@ -323,7 +352,7 @@ private fun FigureCutout(figure: Figure?, speaking: Boolean) {
 }
 
 @Composable
-private fun RoundIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit) {
+internal fun RoundIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, cd: String, onClick: () -> Unit) {
     Box(
         modifier = Modifier.size(44.dp).background(Color.Black.copy(alpha = 0.35f), CircleShape).clickable(onClick = onClick),
         contentAlignment = Alignment.Center,

@@ -55,7 +55,8 @@ class MapViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             getNearbyFigures().collect { list ->
-                _uiState.update { s -> s.copy(figures = list, selection = s.selection ?: list.firstOrNull()?.let { MapSelection.OfFigure(it) }) }
+                // 자동 선택 없음 — 핑을 눌러야 상단 경로·하단 카드가 뜬다. 고른 인물은 새 위치 기준 거리로 갱신
+                _uiState.update { s -> s.copy(figures = list, selection = s.selection.refreshedWith(list, s.sites)) }
             }
         }
         viewModelScope.launch {
@@ -63,7 +64,7 @@ class MapViewModel @Inject constructor(
                 .collect { (here, r) ->
                     val figureSites = _uiState.value.figures.flatMap { it.figure.relatedSiteIds }.toSet()
                     val sites = getNearbySites(here, r).filter { it.site.id !in figureSites }.take(SITE_PIN_MAX)
-                    _uiState.update { it.copy(here = here, radiusM = r, sites = sites) }
+                    _uiState.update { it.copy(here = here, radiusM = r, sites = sites, selection = it.selection.refreshedWith(it.figures, sites)) }
                 }
         }
     }
@@ -75,7 +76,14 @@ class MapViewModel @Inject constructor(
         }
     }
 
-    fun select(selection: MapSelection) {
+    fun select(selection: MapSelection?) {
         _uiState.update { it.copy(selection = selection) }
     }
+}
+
+/** 목록이 새 위치로 다시 계산되면 고른 핀도 같은 id 의 새 값(거리·방위)으로 바꾼다. 목록에 없으면 그대로. */
+private fun MapSelection?.refreshedWith(figures: List<NearbyFigure>, sites: List<NearbySite>): MapSelection? = when (this) {
+    is MapSelection.OfFigure -> figures.firstOrNull { it.figure.id == nearby.figure.id }?.let { MapSelection.OfFigure(it) } ?: this
+    is MapSelection.OfSite -> sites.firstOrNull { it.site.id == nearby.site.id }?.let { MapSelection.OfSite(it) } ?: this
+    null -> null
 }

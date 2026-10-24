@@ -32,7 +32,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -65,6 +67,7 @@ import com.naver.maps.map.util.MarkerIcons
 import com.samdori93.yeoksadam.core.designsystem.component.MedallionPortrait
 import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
 import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
+import com.samdori93.yeoksadam.core.domain.model.LatLng as GeoPoint
 import com.samdori93.yeoksadam.feature.map.viewmodel.MapSelection
 import com.samdori93.yeoksadam.feature.map.viewmodel.MapUiState
 import com.samdori93.yeoksadam.feature.map.viewmodel.MapViewModel
@@ -72,6 +75,7 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 
 private val RADII = listOf(1_000, 3_000, 5_000, 10_000)
+private const val REFIT_DISTANCE_M = 1_000.0
 
 /** 지도 (목업 4번) — 네이버 지도 + 인물 핑 · 표시 반경 원 · 반경 안 유적 · AR 길찾기. */
 @Composable
@@ -96,7 +100,7 @@ fun MapRoute(
 @Composable
 fun MapScreen(
     state: MapUiState,
-    onSelect: (MapSelection) -> Unit,
+    onSelect: (MapSelection?) -> Unit,
     onRadius: (Int) -> Unit,
     onEnterAr: (figureId: String, siteId: String) -> Unit,
     onStartConversation: (figureId: String) -> Unit,
@@ -124,17 +128,26 @@ fun MapScreen(
     }
     val locationSource = rememberFusedLocationSource()
 
-    // 처음 위치를 받았을 때 / 반경을 바꿨을 때: 반경 원이 화면에 꽉 차게
-    var fittedOnce by remember { mutableStateOf(false) }
-    LaunchedEffect(state.here, state.fitRequest) {
+    // 반경 원이 화면에 꽉 차게: 처음 위치 · 반경이 바뀌었을 때 · 위치가 크게 바뀌었을 때
+    // (기본 위치(수원)에서 실제 GPS 로 넘어오면 그쪽으로 옮긴다. 조금씩 걸을 때는 사용자가 옮긴 화면 유지)
+    // 반경은 설정 저장을 거쳐 늦게 들어오므로, 버튼 신호가 아니라 반경 값 자체가 바뀔 때 맞춘다.
+    var fittedAt by remember { mutableStateOf<GeoPoint?>(null) }
+    var fittedRadius by remember { mutableStateOf(0) }
+    LaunchedEffect(state.here, state.radiusM, state.fitRequest) {
         val here = state.here ?: return@LaunchedEffect
-        if (fittedOnce && state.fitRequest == 0) return@LaunchedEffect
-        fittedOnce = true
+        val last = fittedAt
+        val moved = last == null || LatLng(last.lat, last.lng).distanceTo(LatLng(here.lat, here.lng)) > REFIT_DISTANCE_M
+        if (!moved && state.radiusM == fittedRadius) return@LaunchedEffect
+        fittedAt = here
+        fittedRadius = state.radiusM
         val dLat = state.radiusM / 111_320.0
         val dLng = state.radiusM / (111_320.0 * cos(Math.toRadians(here.lat)))
         val bounds = LatLngBounds(LatLng(here.lat - dLat, here.lng - dLng), LatLng(here.lat + dLat, here.lng + dLng))
         cameraPositionState.move(CameraUpdate.fitBounds(bounds, with(density) { 24.dp.roundToPx() }))
     }
+
+    // 같은 유적 인물 핑 간격 계산용 확대 수준 (0.25 단위로만 바뀌게)
+    val pinZoom by remember { derivedStateOf { (cameraPositionState.position.zoom * 4).roundToInt() / 4.0 } }
 
     Box(modifier = modifier.fillMaxSize().background(DancheongColors.HanjiDim)) {
         NaverMap(
@@ -150,6 +163,8 @@ fun MapScreen(
                 isScaleBarEnabled = false,
                 isLocationButtonEnabled = true,
             ),
+            // 빈 곳을 누르면 선택 해제 (상단 경로·하단 카드 닫기)
+            onMapClick = { _, _ -> onSelect(null) },
         ) {
             // 표시 반경 — 반투명 영역 (웹앱과 같은 진사색)
             state.here?.let { here ->
@@ -163,36 +178,49 @@ fun MapScreen(
             }
             // 반경 안 일반 유적 — 넓게 볼 때는 이름을 숨긴다
             state.sites.forEach { ns ->
-                Marker(
-                    state = rememberMarkerState(key = "s:${ns.site.id}", position = LatLng(ns.site.lat, ns.site.lng)),
-                    width = 18.dp,
-                    height = 24.dp,
-                    icon = MarkerIcons.BLACK,
-                    iconTintColor = if (ns.site.local) DancheongColors.Cheongnok else DancheongColors.MeokSoft,
-                    captionText = ns.site.name,
-                    captionTextSize = 11.sp,
-                    captionMinZoom = 13.0,
-                    zIndex = 1,
-                    onClick = {
-                        onSelect(MapSelection.OfSite(ns))
-                        true
-                    },
-                )
+                key(ns.site.id) {
+                    Marker(
+                        state = rememberMarkerState(key = "s:${ns.site.id}", position = LatLng(ns.site.lat, ns.site.lng)),
+                        width = 18.dp,
+                        height = 24.dp,
+                        icon = MarkerIcons.BLACK,
+                        iconTintColor = if (ns.site.local) DancheongColors.Cheongnok else DancheongColors.MeokSoft,
+                        captionText = ns.site.name,
+                        captionTextSize = 11.sp,
+                        captionMinZoom = 13.0,
+                        zIndex = 1,
+                        onClick = {
+                            onSelect(MapSelection.OfSite(ns))
+                            true
+                        },
+                    )
+                }
             }
-            // 인물 핑
+            // 인물 핑 — 초상 메달. 같은 유적의 인물은 핑을 옆으로 나란히 펼쳐 각각 보이게 한다
+            val selectedFigureId = (state.selection as? MapSelection.OfFigure)?.nearby?.figure?.id
+            val slots = figurePinSlots(state.figures)
             state.figures.forEach { nf ->
-                Marker(
-                    state = rememberMarkerState(key = "f:${nf.figure.id}", position = LatLng(nf.site.lat, nf.site.lng)),
-                    icon = MarkerIcons.BLACK,
-                    iconTintColor = DancheongColors.Jujak,
-                    captionText = nf.figure.name,
-                    subCaptionText = nf.site.name,
-                    zIndex = 10,
-                    onClick = {
-                        onSelect(MapSelection.OfFigure(nf))
-                        true
-                    },
-                )
+                key(nf.figure.id, nf.site.id) {
+                    val selected = nf.figure.id == selectedFigureId
+                    val slot = slots.getValue(nf.figure.id)
+                    val target = slot.position(nf.site.lat, nf.site.lng, pinZoom)
+                    val markerState = rememberMarkerState(key = "f:${nf.figure.id}@${nf.site.id}", position = target)
+                    LaunchedEffect(target) { markerState.position = target }
+                    Marker(
+                        state = markerState,
+                        icon = rememberFigurePinIcon(nf.figure.portraitUrl, nf.figure.name, selected),
+                        width = FigurePinWidth,
+                        height = FigurePinHeight,
+                        captionText = nf.figure.name,
+                        // 여럿이 모인 유적은 유적 이름을 가운데 핑에만
+                        subCaptionText = if (slot.showSite) nf.site.name else "",
+                        zIndex = if (selected) 20 else 10,
+                        onClick = {
+                            onSelect(MapSelection.OfFigure(nf))
+                            true
+                        },
+                    )
+                }
             }
         }
 

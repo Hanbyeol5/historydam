@@ -123,8 +123,8 @@ fun YeoksadamAppRoot(
                     navController.popBackStack()
                 },
                 onSwitchToVoice = { figureId ->
-                    // 3. 기존 음성 대화 전환 로직 유지
-                    navController.navigateToVoice(figureId)
+                    // 3. 챗봇에서는 초상화 대화로 전환 (카메라 없이 초상 메달)
+                    navController.navigateToVoice(figureId, portrait = true)
                 }
             )
             voiceScreen(
