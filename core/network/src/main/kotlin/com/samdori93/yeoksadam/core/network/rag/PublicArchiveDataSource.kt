@@ -9,13 +9,15 @@ import org.w3c.dom.Node
 import org.xml.sax.InputSource
 import java.io.ByteArrayInputStream
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 import javax.xml.parsers.DocumentBuilderFactory
 
 /**
- * 공공 API 5곳 검색 — historydam backend(main.py)의 fetch_museum · fetch_archives · fetch_kdp ·
- * fetch_dictionary · fetch_diary 를 앱으로 옮긴 것 (지식이음 2곳은 실제 응답 형식에 맞게 고침). 각 함수는 「[출처: …] 내용」 문자열을 최대 2건 돌려주고,
+ * 공공기관 역사 자료 7곳 검색 — historydam backend(main.py)의 fetch_museum · fetch_archives · fetch_kdp · fetch_diary 를
+ * 앱으로 옮기고(실제 응답 형식에 맞게 고침), 검색이 안 되는 한국고고학사전 대신 국가유산청 국가유산 정보를 넣고, 지식이음 조상화·고문헌을 더했다.
+ * 근거의 신뢰도를 위해 공공기관 자료만 쓴다 (위키백과처럼 누구나 고치는 자료는 넣지 않는다). 각 함수는 「[출처: …] 내용」 문자열을 최대 2건 돌려주고,
  * 오류·빈 결과는 빈 목록이다 (백엔드와 같음). 네트워크를 쓰므로 IO 디스패처에서 부른다.
  *
  * 키는 local.properties 의 PUBLIC_API_KEY(공공데이터포털) · KDP_API_KEY (커밋 금지).
@@ -74,49 +76,86 @@ class PublicArchiveDataSource @Inject constructor(
         }.take(MAX_PER_SOURCE)
     }
 
+    /** 인물의 관련 유적 — 앱의 유적 id 는 국가유산청 코드(종목-지정번호-시도, 예: 13-0000030000000-31)거나 향토유산 등 다른 id */
+    data class SiteRef(val id: String, val name: String)
+
     /**
-     * 4. 국가유산 지식이음 — 한국고고학사전 (idx=39).
-     * 이 API 는 검색어를 받지 않고 2만 건이 넘어 전부 받을 수 없으므로, 백엔드처럼 앞 20건에서 검색어가 든 것만 쓴다.
-     * (백엔드는 firstIndex·<item>·NAME 으로 읽어 늘 0건이었다 — 실제 응답은 firstindex·<data>·md_dataN)
+     * 4. 국가유산청 국가유산 정보 (키 없음) — 인물의 관련 유적 공식 설명.
+     * id 가 국가유산청 코드면 상세를 바로, 아니면 이름으로 검색해 같은 이름의 유산을 찾는다.
+     * (backend 의 한국고고학사전 idx=39 는 검색어를 받지 않아 늘 0건이라 이것으로 바꿨다)
      */
-    fun dictionary(keyword: String): List<String> = guarded {
-        val doc = get(NRICH_URL, "idx" to "39", "firstindex" to "1", "recordcountperpage" to "20")
-            ?: return@guarded emptyList()
-        match(nrichRecords(doc), keyword, "한국고고학사전 API")
+    fun heritage(sites: List<SiteRef>): List<String> = guarded {
+        sites.asSequence().distinctBy { it.id }.mapNotNull { site ->
+            runCatching {
+                val code = KHS_CODE.matchEntire(site.id)?.destructured?.toList() ?: searchKhsCode(site.name) ?: return@runCatching null
+                val detail = get(KHS_DETAIL_URL, "ccbaKdcd" to code[0], "ccbaAsno" to code[1], "ccbaCtcd" to code[2])
+                    ?: return@runCatching null
+                val name = clean(detail.items("ccbaMnm1").firstOrNull()?.textContent).ifEmpty { site.name }
+                val content = clean(detail.items("content").firstOrNull()?.textContent)
+                if (content.isBlank()) null else "[출처: 국가유산청 API] $name: ${content.take(300)}"
+            }.getOrNull()
+        }.take(MAX_PER_SOURCE).toList()
+    }
+
+    /** 이름이 같은(없으면 이름을 포함한) 국가유산의 [종목, 지정번호, 시도] */
+    private fun searchKhsCode(name: String): List<String>? {
+        if (name.isBlank()) return null
+        val items = get(KHS_LIST_URL, "ccbaMnm1" to name, "pageUnit" to "5")?.items("item").orEmpty()
+        val pick = items.firstOrNull { clean(it.child("ccbaMnm1")?.textContent) == name }
+            ?: items.firstOrNull { name in clean(it.child("ccbaMnm1")?.textContent) }
+            ?: return null
+        return listOf("ccbaKdcd", "ccbaAsno", "ccbaCtcd").map { clean(pick.child(it)?.textContent) }
     }
 
     /**
-     * 5. 국가유산 지식이음 — 조선시대 개인일기 (idx=205, 1,431건 · 약 2MB · 받는 데 30초 안팎).
-     * 검색어를 받지 않는 API 라 처음 부를 때 뒤에서 전부 받아 두고(앱이 켜져 있는 동안), 받기 전에는 빈 목록을 돌려
-     * 답을 기다리게 하지 않는다. 받아 둔 뒤의 질문부터 일기에서 찾는다.
+     * 5~7. 국가유산 지식이음 — 검색어를 받지 않는 목록 API 들. 처음 부를 때 뒤에서 전부 받아 두고(앱이 켜져 있는 동안)
+     * 그 안에서 찾는다. 받기 전에는 빈 목록을 돌려 답을 기다리게 하지 않는다 (받아 둔 뒤의 질문부터 쓰인다).
+     *  - 조선시대 개인일기 idx=205 (1,431건 · 약 2MB · 받는 데 30초 안팎)
+     *  - 조상화 국가지정목록 idx=209 (112건 · 국보·보물 초상화 해설 — 채제공·정몽주 초상, 태조 어진 등)
+     *  - 고문헌(미술분야) idx=31 (729건 · 실록·행장 등 옛 문헌 해제)
      */
-    fun diary(keyword: String): List<String> {
-        val all = diaries
-        if (all == null) {
-            prefetchDiaries()
+    fun diary(keyword: String): List<String> = cached(diarySet, keyword)
+
+    fun portraits(keyword: String): List<String> = cached(portraitSet, keyword)
+
+    fun oldBooks(keyword: String): List<String> = cached(oldBookSet, keyword)
+
+    /** 세 목록을 뒤에서 미리 받아 둔다 (이미 받았거나 받는 중이면 건너뜀) */
+    fun prefetch() = listOf(diarySet, portraitSet, oldBookSet).forEach(::prefetch)
+
+    private class NrichSet(val idx: String, val source: String) {
+        @Volatile var records: List<NrichRecord>? = null
+        val loading = AtomicBoolean(false)
+    }
+
+    private val diarySet = NrichSet("205", "조선시대 개인일기 API")
+    private val portraitSet = NrichSet("209", "조상화 국가지정목록 API")
+    private val oldBookSet = NrichSet("31", "고문헌(미술분야) API")
+
+    private fun cached(set: NrichSet, keyword: String): List<String> {
+        val all = set.records ?: run {
+            prefetch(set)
             return emptyList()
         }
-        return runCatching { match(all, keyword, "조선시대 개인일기 API") }.getOrDefault(emptyList())
+        return runCatching { match(all, keyword, set.source) }.getOrDefault(emptyList())
     }
 
-    /** 일기 전체를 뒤에서 받아 둔다 (이미 받았거나 받는 중이면 아무것도 안 함, 실패하면 다음에 다시) */
-    fun prefetchDiaries() {
-        if (diaries != null || !loadingDiaries.compareAndSet(false, true)) return
+    private fun prefetch(set: NrichSet) {
+        if (set.records != null || !set.loading.compareAndSet(false, true)) return
         Thread {
             try {
-                get(NRICH_URL, "idx" to "205", "firstindex" to "1", "recordcountperpage" to "5000", timeoutS = DIARY_TIMEOUT_S)
-                    ?.let { diaries = nrichRecords(it) }
+                get(NRICH_URL, "idx" to set.idx, "firstindex" to "1", "recordcountperpage" to "5000", timeoutS = LIST_TIMEOUT_S)
+                    ?.let { set.records = nrichRecords(it) }
             } catch (_: Exception) {
                 // 다음 질문 때 다시 시도
             } finally {
-                loadingDiaries.set(false)
+                set.loading.set(false)
             }
-        }.apply { isDaemon = true; name = "nrich-diary" }.start()
+        }.apply {
+            isDaemon = true
+            name = "nrich-${set.idx}"
+        }.start()
     }
-
-    @Volatile
-    private var diaries: List<NrichRecord>? = null
-    private val loadingDiaries = java.util.concurrent.atomic.AtomicBoolean(false)
 
     /** 지식이음 레코드 — md_data3 이 이름(일기명·유적명), 가장 긴 글이 설명 */
     private data class NrichRecord(val title: String, val text: String)
@@ -128,15 +167,21 @@ class PublicArchiveDataSource @Inject constructor(
         NrichRecord(title, fields.values.filter { it != title }.maxByOrNull { it.length }.orEmpty())
     }
 
-    /** 인물 검색어(첫 낱말)가 들어간 것 중 질문 핵심어가 많이 겹치는 순으로 2건 */
+    /**
+     * 인물 검색어(첫 낱말)가 들어간 것 중 — 제목에 인물이 있는 것을 먼저, 그다음 질문 핵심어가 많이 겹치는 순으로 2건
+     * (같은 제목·내용은 한 번만)
+     */
     private fun match(records: List<NrichRecord>, keyword: String, source: String): List<String> {
         val words = keyword.split(' ').filter { it.isNotBlank() }
         val head = words.firstOrNull() ?: return emptyList()
         return records
             .filter { head in it.title || head in it.text }
-            .sortedByDescending { r -> words.drop(1).count { w -> w in r.title || w in r.text } }
-            .take(MAX_PER_SOURCE)
+            .sortedByDescending { r ->
+                (if (head in r.title) 2 else 0) + words.drop(1).count { w -> w in r.title || w in r.text }
+            }
             .map { "[출처: $source] ${it.title}: ${it.text.take(100)}" }
+            .distinct()
+            .take(MAX_PER_SOURCE)
     }
 
     /** 응답이 200 이 아니면 null (KDP 는 백엔드도 상태코드를 본다. 나머지는 XML 파싱 실패로 같은 결과) */
@@ -210,8 +255,11 @@ class PublicArchiveDataSource @Inject constructor(
         const val ARCHIVES_URL = "https://apis.data.go.kr/1741050/openapi/searcharc"
         const val KDP_URL = "https://kdp.aks.ac.kr/api/search"
         const val NRICH_URL = "http://portal.nrich.go.kr/kor/openapi.do"
+        const val KHS_LIST_URL = "https://www.khs.go.kr/cha/SearchKindOpenapiList.do"
+        const val KHS_DETAIL_URL = "https://www.khs.go.kr/cha/SearchKindOpenapiDt.do"
+        val KHS_CODE = Regex("""(\d{2})-(\d{13})-(\d{2})""")
         const val TIMEOUT_S = 5L
-        const val DIARY_TIMEOUT_S = 90L
+        const val LIST_TIMEOUT_S = 90L
         const val MAX_PER_SOURCE = 2
         val TAG = Regex("<.*?>")
     }

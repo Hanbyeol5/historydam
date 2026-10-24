@@ -7,6 +7,7 @@ import com.samdori93.yeoksadam.core.domain.model.ChatMessage
 import com.samdori93.yeoksadam.core.domain.model.Citation
 import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.Role
+import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
 import com.samdori93.yeoksadam.core.network.rag.GeminiTextDataSource
 import com.samdori93.yeoksadam.core.network.rag.PublicArchiveDataSource
@@ -21,7 +22,7 @@ import javax.inject.Singleton
 /**
  * 백엔드 RAG — historydam backend(main.py `POST /v1/chat`)를 서버 없이 앱 안에서 그대로 돌린다.
  *  1) 질문 의도 분류 ([IntentClassifier]) — 단순 대화면 자료 검색을 건너뛴다
- *  2) 역사 질의면 공공 API 5곳을 동시에 검색 (인물 검색어 + 질문 핵심어 2개)
+ *  2) 역사 질의면 공공기관 자료 7곳을 동시에 검색 (인물 검색어 + 질문 핵심어 2개, 국가유산청은 인물의 관련 유적)
  *  3) 인물 설정·참고 자료·질문으로 프롬프트를 만들어 Gemini 에 묻는다
  * 백엔드에 설정이 있는 세종대왕·이순신·장영실은 그 설정을, 나머지 인물은 앱의 인물 자료(직함·생몰년·말씨)로 만든 설정을 쓴다.
  */
@@ -31,6 +32,7 @@ class BackendRagChat @Inject constructor(
     private val archives: PublicArchiveDataSource,
     private val gemini: GeminiTextDataSource,
     private val figures: FigureRepository,
+    private val catalog: CatalogRepository,
     private val dispatchers: DispatcherProvider,
 ) {
     private val classifier by lazy {
@@ -39,32 +41,49 @@ class BackendRagChat @Inject constructor(
 
     /** @param boundary 지식 경계 필터(설정) — 켜져 있으면 백엔드의 원칙 4(세상을 떠난 뒤의 일은 모른다)를 넣는다 */
     suspend fun ask(figureId: String, question: String, boundary: Boolean): ChatMessage = withContext(dispatchers.io) {
-        val persona = personaOf(figureId)
+        archives.prefetch() // 검색어를 받지 않는 지식이음 목록 3개를 뒤에서 미리 받아 둔다
+        val figure = figureOf(figureId)
+        val persona = personaOf(figureId, figure)
         val keyword = optimizedQuery(persona.keyword, question)
-        val contexts = if (classifier.isHistoryQuestion(question)) search(keyword) else emptyList()
+        val contexts = if (classifier.isHistoryQuestion(question)) search(keyword, sitesOf(figure)) else emptyList()
         val answer = gemini.generate(prompt(persona, contexts, question, boundary))
         ChatMessage(role = Role.FIGURE, text = answer, citations = contexts.map(::citationOf))
     }
 
-    private suspend fun search(keyword: String): List<String> = coroutineScope {
-        listOf(archives::museum, archives::archives, archives::kdp, archives::dictionary, archives::diary)
-            .map { fetch -> async { fetch(keyword) } }
-            .awaitAll()
-            .flatten()
+    /** 백엔드의 5곳 중 한국고고학사전(검색 불가)은 국가유산청 국가유산 정보(인물의 관련 유적)로 바꾸고, 지식이음 조상화·고문헌을 더했다 (공공기관 자료 7곳) */
+    private suspend fun search(keyword: String, sites: List<PublicArchiveDataSource.SiteRef>): List<String> = coroutineScope {
+        listOf<() -> List<String>>(
+            { archives.museum(keyword) },
+            { archives.archives(keyword) },
+            { archives.kdp(keyword) },
+            { archives.heritage(sites) },
+            { archives.diary(keyword) },
+            { archives.portraits(keyword) },
+            { archives.oldBooks(keyword) },
+        ).map { fetch -> async { fetch() } }.awaitAll().flatten()
     }
 
-    private suspend fun personaOf(figureId: String): Persona {
+    private suspend fun figureOf(figureId: String): Figure? =
+        figures.getFigure(figureId).getOrNull() ?: figures.getFigure(figureId.removePrefix("fig_")).getOrNull()
+
+    /** 인물의 관련 유적 (인물 자료에 적힌 순서 — 대표 유적이 먼저) */
+    private suspend fun sitesOf(figure: Figure?): List<PublicArchiveDataSource.SiteRef> =
+        figure?.relatedSiteIds.orEmpty().take(MAX_SITES).map { id ->
+            PublicArchiveDataSource.SiteRef(id = id, name = catalog.site(id)?.name.orEmpty())
+        }
+
+    private fun personaOf(figureId: String, figure: Figure?): Persona {
         val key = normalize(figureId)
         BACKEND_FIGURES[key]?.let { return it }
-        val figure = figures.getFigure(figureId).getOrNull()
-            ?: figures.getFigure(figureId.removePrefix("fig_")).getOrNull()
-            ?: return Persona(
+        if (figure == null) {
+            return Persona(
                 name = figureId,
                 era = "역사 속",
                 maxYear = 2026,
                 keyword = figureId,
                 persona = "역사적 인물 '$figureId'이다. 품격 있는 어조로 답하라.",
             )
+        }
         return personaFrom(figure)
     }
 
@@ -78,6 +97,7 @@ class BackendRagChat @Inject constructor(
 
     internal companion object {
         const val MODEL_ASSET = "intent_model.json"
+        const val MAX_SITES = 3
 
         /** 백엔드 FIGURE_INFO (main.py) 그대로 */
         val BACKEND_FIGURES = mapOf(
