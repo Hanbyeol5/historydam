@@ -26,12 +26,13 @@ data class Citation(
  * - BASIC: 서버 /chat — 인물에 연결된 유적 설명을 통째로 근거로
  * - RAG: 서버 /rag — 질문마다 유적 1,486곳 자료를 검색해 근거로, 출처 표시
  * - EXTERNAL: 외부 RAG 서버(historydam backend) /v1/chat
+ * - BACKEND: historydam backend 의 RAG(의도 분류 → 공공 API 5곳 검색 → Gemini)를 앱 안에서 직접 (기본값)
  */
-enum class ChatMode { BASIC, RAG, EXTERNAL }
+enum class ChatMode { BASIC, RAG, EXTERNAL, BACKEND }
 
 /** 대화·표시 설정 (DataStore). */
 data class ChatSettings(
-    val mode: ChatMode = ChatMode.BASIC,
+    val mode: ChatMode = ChatMode.BACKEND,
     /** 외부 RAG 서버 주소 (EXTERNAL 일 때) */
     val externalUrl: String = "",
     /** 지식 경계 필터: 인물이 세상을 떠난 뒤의 일은 모른다 */

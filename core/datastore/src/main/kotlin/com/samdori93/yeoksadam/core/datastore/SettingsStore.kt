@@ -20,7 +20,7 @@ class SettingsStore @Inject constructor(
 
     val raw: Flow<Raw> = dataStore.data.map {
         Raw(
-            mode = it[MODE] ?: "BASIC",
+            mode = it[MODE] ?: "BACKEND",
             externalUrl = it[URL] ?: "",
             boundary = it[BOUNDARY] ?: true,
             radiusM = it[RADIUS] ?: 10_000,

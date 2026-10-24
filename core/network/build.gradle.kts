@@ -35,6 +35,9 @@ android {
             "GEMINI_API_KEY",
             "\"${secret("GEMINI_API_KEY", "")}\"",
         )
+        // 백엔드 RAG 의 공공 API 키 (backend/.env 와 같은 값) — local.properties (커밋 금지)
+        buildConfigField("String", "PUBLIC_API_KEY", "\"${secret("PUBLIC_API_KEY", "")}\"")
+        buildConfigField("String", "KDP_API_KEY", "\"${secret("KDP_API_KEY", "")}\"")
     }
 }
 

@@ -2,6 +2,7 @@ package com.samdori93.yeoksadam.core.data.repository
 
 import com.samdori93.yeoksadam.core.common.error.AppError
 import com.samdori93.yeoksadam.core.common.result.Result
+import com.samdori93.yeoksadam.core.data.rag.BackendRagChat
 import com.samdori93.yeoksadam.core.database.dao.ChatDao
 import com.samdori93.yeoksadam.core.database.entity.ChatMessageEntity
 import com.samdori93.yeoksadam.core.domain.model.ChatMessage
@@ -34,12 +35,14 @@ import javax.inject.Inject
  *  - 기본: Worker /chat (인물에 연결된 유적 설명을 근거로)
  *  - RAG 서버: Worker /rag (질문마다 유적 1,486곳 자료 검색, 근거 유적 표시)
  *  - 외부 RAG: historydam backend /v1/chat (없으면 예전 /chat)
+ *  - 백엔드 RAG(기본): historydam backend 의 RAG 를 앱 안에서 직접 ([BackendRagChat])
  * 질문·답은 Room 에 저장해 다시 들어와도 이어진다(대화 기록 보존). 오류 안내는 저장하지 않는다.
  */
 class ChatRepositoryImpl @Inject constructor(
     private val worker: WorkerApi,
     private val chatDao: ChatDao,
     private val settingsRepository: SettingsRepository,
+    private val backendRag: BackendRagChat,
     private val json: Json,
 ) : ChatRepository {
 
@@ -52,6 +55,7 @@ class ChatRepositoryImpl @Inject constructor(
         val reply = try {
             when (settings.mode) {
                 ChatMode.EXTERNAL -> external(settings.externalUrl, figureId, message)
+                ChatMode.BACKEND -> backendRag.ask(figureId, message, settings.boundary)
                 else -> {
                     val lines = chatDao.recent(figureId, HISTORY_LIMIT)
                         .map { TalkLine(mine = it.role == Role.USER.name, text = it.text) }
@@ -91,7 +95,8 @@ class ChatRepositoryImpl @Inject constructor(
     /** 외부 RAG 서버 — historydam 새 주소 /v1/chat 을 먼저, 없으면(404·405) 예전 /chat */
     private suspend fun external(base: String, figureId: String, question: String): ChatMessage {
         check(base.startsWith("https://") || base.startsWith("http://")) { "메뉴 설정에서 외부 RAG 서버 주소를 입력해 주세요." }
-        val body = ExternalBody(figureId = figureId, question = question)
+        // 백엔드는 인물 ID 를 접두사 없이 밑줄로 쓴다 (fig_sejong → sejong, jang-yeongsil → jang_yeongsil)
+        val body = ExternalBody(figureId = figureId.removePrefix("fig_").replace('-', '_'), question = question)
         val r = try {
             worker.external("$base/v1/chat", body)
         } catch (e: HttpException) {

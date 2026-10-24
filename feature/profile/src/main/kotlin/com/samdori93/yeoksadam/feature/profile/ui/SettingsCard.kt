@@ -68,6 +68,7 @@ class SettingsViewModel @Inject constructor(
 }
 
 private val MODES = listOf(
+    Triple(ChatMode.BACKEND, "백엔드 RAG (historydam backend)", "질문 의도를 분류해 역사 질문이면 공공 API 5곳(박물관·국가기록원·한국학자료·고교차사전·지도일기)을 검색하고, Gemini 가 인물 말투로 답해요."),
     Triple(ChatMode.BASIC, "기본", "인물에 연결된 유적 자료를 통째로 참고해 답해요."),
     Triple(ChatMode.RAG, "RAG 서버 (역사담 내장)", "질문마다 경기도 유적 1,486곳 자료에서 관련 내용을 검색해 답하고, 근거 유적을 보여 줘요."),
     Triple(ChatMode.EXTERNAL, "외부 RAG 서버 (historydam backend)", "직접 운영하는 RAG 서버에 질문을 보내요. POST /v1/chat {figureId, question}"),

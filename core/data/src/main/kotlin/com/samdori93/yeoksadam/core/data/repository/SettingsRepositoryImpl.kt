@@ -15,7 +15,7 @@ class SettingsRepositoryImpl @Inject constructor(
 
     override val settings: Flow<ChatSettings> = store.raw.map { r ->
         ChatSettings(
-            mode = runCatching { ChatMode.valueOf(r.mode) }.getOrDefault(ChatMode.BASIC),
+            mode = runCatching { ChatMode.valueOf(r.mode) }.getOrDefault(ChatMode.BACKEND),
             externalUrl = r.externalUrl,
             boundary = r.boundary,
             radiusM = r.radiusM,

@@ -117,6 +117,7 @@ class VoiceViewModel @Inject constructor(
                 val badge = when (s.mode) {
                     ChatMode.RAG -> "RAG"
                     ChatMode.EXTERNAL -> "외부 RAG"
+                    ChatMode.BACKEND -> "백엔드 RAG"
                     ChatMode.BASIC -> null
                 }
                 _uiState.update { it.copy(modeBadge = badge) }
