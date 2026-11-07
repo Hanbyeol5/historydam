@@ -11,10 +11,10 @@
 |---|---|---|
 | 홈 · 내 주변 인물 | `feature:home` | 현재 위치 기준 가까운 인물 초상 캐러셀, 거리 표시 |
 | 지도 | `feature:map` | 네이버 지도 + 인물 초상 핀 · 유적 핀, 핀 → 카드 → AR 진입 |
-| AR 탐색 · 대면 | `feature:ar` | 카메라 화면 위에 GPS·나침반으로 유적 라벨과 인물 방향 표시, 가까이 가면 초상 등장·대화 |
-| 유물 인식 카메라 | `feature:camera` | 촬영 → 서버 인식(`/vision`) → 관련 인물 해설(🔊) |
+| AR 탐색 · 대면 | `feature:ar` | 카메라 화면 위에 GPS·나침반으로 유적 라벨과 인물 방향 표시, 「찾기」 시 3D 인물(정약용)을 유적 쪽에 세움 (100m 안 실제 위치, 밖은 6m 앞 미리보기) |
+| 유물 인식 카메라 | `feature:camera` | 촬영 → Gemini 판별(주변 3km 문화재 8곳을 힌트로) → 해설(🔊) + 관련 인물 (앱 인물 연결 · 「AI 추정」 추천) |
 | 인물 대화(텍스트) | `feature:chat` | **백엔드 RAG**(기본) — 공공기관 자료를 근거로 인물 말투로 답하고 출처 표시 |
-| 초상화 음성 대화 | `feature:voice` | STT 입력 + 인물 보이스 TTS + 실시간 자막, 챗봇과 대화 기록 공유 |
+| 초상화 음성 대화 | `feature:voice` | STT 입력 + 인물 보이스 TTS + 실시간 자막, 챗봇과 대화 기록 공유. 3D 모델이 있는 인물은 바닥 위에 실제 키로 세움 |
 | 모든 인물 · 인물 상세 | `feature:figure` | 가나다순 / 주변 필터, 관련 유적 |
 | 역사의 전당(도감) | `feature:profile` | 발견한 유적 · 인물 · 유물 수집, 대화 방식 · 지식 경계 필터 설정 |
 | 위치 알림 | `feature:notification` | 유적 지오펜스 진입 시 알림 |
@@ -52,8 +52,9 @@
 | 무엇 | 어디 |
 |---|---|
 | 인물 · 유적 자료, 초상 | 역사담 웹앱 데이터 (`samcho93.github.io/arHeritage/data/…`) |
-| 「기본」·「RAG 서버」 대화, 인물 보이스 TTS, 사진 인식 | 역사담 Cloudflare Worker (`yeoksadam-api`) |
-| 백엔드 RAG 대화 | 앱 안 (`core:backend`) → 공공기관 API · Gemini |
+| 「기본」·「RAG 서버」 대화, 인물 보이스 TTS, 사진 인식 폴백 | 역사담 Cloudflare Worker (`yeoksadam-api`) |
+| 백엔드 RAG 대화, 사진 인식 · 관련 인물 추천 | 앱 안 (`core:backend`) → 공공기관 API · Gemini |
+| 3D 인물 모델 | `core/ui/src/main/assets/models/<인물 id>.glb` (저장소에 없음 — 아래 「3D 모델 파일」 참고) |
 | 팀 백엔드 원본 | [`backend/`](backend) (FastAPI, 직접 실행 시 「외부 RAG 서버」로 연결) |
 
 ## 실행하기
@@ -79,7 +80,19 @@ KDP_API_KEY=…                # 한국학자료통합플랫폼 (없으면 이 �
 >
 > 키는 빌드 시 앱에 들어갑니다. 발표 · 시연용이며, 일반 배포 전에는 키를 서버로 옮기고 새로 발급하세요.
 
-### 2) 빌드 · 설치 · 검증
+### 2) 3D 모델 파일 (커밋 금지)
+
+정약용 3D 모델은 라이선스(Tripo AI 이용 조건 · 원본 초상 권리)와 고증 확인 전이라 저장소에 올리지 않았습니다.
+팀에서 받은 `jeong-yakyong.glb` 를 아래 위치에 직접 넣어 주세요.
+
+```
+core/ui/src/main/assets/models/jeong-yakyong.glb
+```
+
+- 등록된 모델 목록은 `core:ui` 의 `Figure3dModels`, 출처 · 권리 메모는 [`assets/figures/jeong-yakyong/license.json`](assets/figures/jeong-yakyong/license.json).
+- 권리 확인이 끝나면 `license.json` 의 `rights` · `verifiedAt` 을 채운 뒤 커밋합니다.
+
+### 3) 빌드 · 설치 · 검증
 
 ```bash
 ./gradlew assembleDebug                     # 디버그 APK
@@ -89,7 +102,9 @@ KDP_API_KEY=…                # 한국학자료통합플랫폼 (없으면 이 �
 ./gradlew spotlessApply detekt              # 포맷 + 정적 분석
 ```
 
-> **minSdk 26** — 실기기(개발자 모드) 또는 API 26+ 에뮬레이터에서 실행하세요.
+> **minSdk 26** — 실기기(개발자 모드) 또는 API 26+ 에뮬레이터에서 실행하세요. 3D AR 은 ARCore 지원 기기에서만 보이고, 미지원 기기는 2D 초상으로 대체됩니다.
+>
+> 삼성 보안 폴더가 있는 폰에서 `installDebug` 가 실패하면 `adb install --user 0 -r app/build/outputs/apk/debug/app-arm64-v8a-debug.apk` 로 설치하세요.
 
 ## 기술 스택
 
@@ -98,7 +113,7 @@ KDP_API_KEY=…                # 한국학자료통합플랫폼 (없으면 이 �
 - **DI / 네비게이션:** Hilt · Navigation Compose (type-safe)
 - **네트워크 / 저장:** Retrofit · OkHttp · kotlinx.serialization · Room · DataStore
 - **지도 / 위치:** 네이버 지도 Compose · FusedLocation · Geofencing
-- **카메라 / AR:** CameraX + GPS · 나침반 방위 (위치 기반 AR 라벨 · 인물 대면)
+- **카메라 / AR:** CameraX + GPS · 나침반 방위 (위치 기반 AR 라벨), ARCore + SceneView (3D 인물, GLB)
 - **음성:** `SpeechRecognizer`(STT) · 서버 인물 보이스 TTS(+ 기기 `TextToSpeech` 폴백)
 - **AI:** Gemini (`gemini-3-flash-preview`) · 의도 분류 TF-IDF + LogisticRegression
 
@@ -129,4 +144,6 @@ scripts/                  의도 분류 모델 → 앱용 JSON 변환
 
 - 의도 분류 학습 문장 확대 — 지금은 20문장이라 역사 질문도 「단순 대화」로 분류돼 자료 검색을 건너뛰는 경우가 많음
 - 일반 배포 전 API 키를 서버로 이전 (`backend/` 서버 배포 + 앱은 「외부 RAG 서버」 방식)
-- ARCore Geospatial 앵커 · 3D 인물 · 립싱크
+- 3D 인물 추가(정조 · 채제공) · 근접 시 자동 등장 · 립싱크
+- 3D 모델 라이선스 · 고증 확인 후 커밋
+- ARCore Geospatial 앵커 (지금은 GPS + 나침반)
