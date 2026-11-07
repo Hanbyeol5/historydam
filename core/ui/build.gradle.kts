@@ -14,6 +14,8 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     api(libs.coil.compose)
+    // AR·대화 화면 공용: 3D 인물 (ARCore + Filament)
+    implementation(libs.sceneview.ar)
     // AR·대화 화면 공용: 후면 카메라 배경
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)

@@ -44,6 +44,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -67,6 +69,10 @@ import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
 import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
 import com.samdori93.yeoksadam.core.domain.model.NearbySite
 import com.samdori93.yeoksadam.core.ui.ar.CameraBackground
+import com.samdori93.yeoksadam.core.ui.ar.Figure3dModels
+import com.samdori93.yeoksadam.core.ui.ar.FigureArScene
+import com.samdori93.yeoksadam.core.ui.ar.FigurePlacement
+import com.samdori93.yeoksadam.core.ui.ar.rememberArCoreSupported
 import com.samdori93.yeoksadam.core.ui.ar.angleDiff
 import com.samdori93.yeoksadam.core.ui.ar.rememberCameraOrientation
 import com.samdori93.yeoksadam.feature.ar.viewmodel.ArUiState
@@ -75,6 +81,10 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val RADII = listOf(1_000, 3_000, 5_000, 10_000)
+
+/** 인물 유적이 이만큼 가까우면 3D 인물을 실제 위치에, 멀면 그 방향 [PREVIEW_M] 앞에 미리보기로 세운다 */
+private const val REAL_SPOT_M = 100f
+private const val PREVIEW_M = 6f
 
 @Composable
 fun ArRoute(
@@ -107,8 +117,43 @@ fun ArScreen(
     val context = LocalContext.current
     val orientation by rememberCameraOrientation()
 
+    // 찾아가는 인물에게 3D 모델이 있고 ARCore 를 쓸 수 있으면, 카메라 화면 위 실제 공간에 사람 크기로 세운다
+    val model3d = Figure3dModels.of(state.targetFigure?.id).takeIf { state.target != null }
+    val arSupported by rememberArCoreSupported()
+    var arFailed by remember { mutableStateOf(false) }
+    val use3d = hasCamera && model3d != null && arSupported == true && !arFailed
+    val waitingAr = hasCamera && model3d != null && arSupported == null && !arFailed
+    val realDist = state.here?.let { h -> state.target?.let { t -> GeoMath.distanceMeters(h.lat, h.lng, t.lat, t.lng) } }
+    val atRealSpot = realDist != null && realDist <= REAL_SPOT_M
+    // 세울 때 쓰는 최신 방위 · 거리 (유적 100m 안이면 실제 위치, 멀면 그 방향 6m 앞 미리보기)
+    val latestAim by rememberUpdatedState(
+        state.here?.let { h ->
+            state.target?.takeIf { orientation.available }?.let { t ->
+                angleDiff(orientation.heading, GeoMath.bearingDegrees(h.lat, h.lng, t.lat, t.lng)) to
+                    (if (atRealSpot) realDist ?: PREVIEW_M else PREVIEW_M)
+            }
+        },
+    )
+    val placement = remember { FigurePlacement.Toward { latestAim } }
+    var recall by remember { mutableIntStateOf(0) }
+    LaunchedEffect(atRealSpot, state.target?.id) { recall++ }
+    var figureAim by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var tracking by remember { mutableStateOf<String?>(null) }
+
     BoxWithConstraints(modifier.fillMaxSize().background(Color(0xFF1A140F))) {
-        if (hasCamera) CameraBackground(Modifier.fillMaxSize())
+        if (use3d && model3d != null) {
+            FigureArScene(
+                model = model3d,
+                placement = placement,
+                recall = recall,
+                onAim = { a, d -> figureAim = a to d },
+                onFailed = { arFailed = true },
+                modifier = Modifier.fillMaxSize(),
+                onTracking = { tracking = it },
+            )
+        } else if (hasCamera && !waitingAr) {
+            CameraBackground(Modifier.fillMaxSize())
+        }
         val w = maxWidth.value
         val h = maxHeight.value
         val layout = layoutLabels(state.sites, orientation.heading, orientation.pitch, w, h, state.radiusM, state.target, state.important)
@@ -205,6 +250,20 @@ fun ArScreen(
                     color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
                 )
+                // 3D 인물 안내
+                if (use3d) {
+                    val name = state.targetFigure?.name.orEmpty()
+                    Text(
+                        when {
+                            tracking != null -> tracking.orEmpty()
+                            figureAim == null -> "카메라로 주변을 비추면 ${name}이(가) 나타나요"
+                            atRealSpot -> "$name 3D · 실제 위치에 서 있어요 · 다가가면 커져요"
+                            else -> "$name 3D 미리보기 · 실제 위치는 ${formatDistance(dist)} 앞 · 100m 안에 오면 그 자리에 서요"
+                        },
+                        color = Color.White, fontSize = 12.sp,
+                        modifier = Modifier.padding(top = 6.dp).background(DancheongColors.Jujak.copy(alpha = 0.75f), RoundedCornerShape(12.dp)).padding(horizontal = 10.dp, vertical = 5.dp),
+                    )
+                }
             }
         }
 

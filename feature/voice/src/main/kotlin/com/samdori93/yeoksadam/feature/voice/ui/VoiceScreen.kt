@@ -44,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +69,10 @@ import com.samdori93.yeoksadam.core.domain.model.ChatMessage
 import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.ui.ar.CameraBackground
+import com.samdori93.yeoksadam.core.ui.ar.Figure3dModels
+import com.samdori93.yeoksadam.core.ui.ar.FigureArScene
+import com.samdori93.yeoksadam.core.ui.ar.FigurePlacement
+import com.samdori93.yeoksadam.core.ui.ar.rememberArCoreSupported
 import com.samdori93.yeoksadam.core.ui.ar.angleDiff
 import com.samdori93.yeoksadam.core.ui.ar.rememberCameraOrientation
 import com.samdori93.yeoksadam.feature.voice.viewmodel.VoiceStatus
@@ -83,6 +88,7 @@ private val CaptionShadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blur
  * 인물과 마주 보는 AR 대화 (웹앱 talk 화면).
  * 후면 카메라 위에 배경을 걷어낸 인물이 서 있고, 대화는 라이브 방송 자막처럼 흐른다.
  * 인물은 대화를 시작한 방위에 고정 — 폰을 돌리면 화면 밖으로 밀려나고 ⟲ 로 정면에 다시 부른다.
+ * 3D 모델이 있는 인물(현재 정약용)은 ARCore 로 실제 공간에 사람 크기로 세운다 — 다가가면 커지고 멀어지면 작아진다.
  */
 @Composable
 fun VoiceScreen(
@@ -100,23 +106,51 @@ fun VoiceScreen(
     if (anchor.isNaN() && orientation.available) anchor = orientation.heading
     val figure = state.figure?.figure
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color(0xFF1A140F))) {
-        if (hasCamera) CameraBackground(Modifier.fillMaxSize())
+    // 3D 모델이 있는 인물 + ARCore 지원 기기면 실제 공간에 사람 크기 3D 인물, 아니면 2D 컷아웃
+    val model3d = Figure3dModels.of(figure?.id)
+    val arSupported by rememberArCoreSupported()
+    var arFailed by remember { mutableStateOf(false) }
+    val use3d = hasCamera && model3d != null && arSupported == true && !arFailed
+    val waitingAr = hasCamera && model3d != null && arSupported == null && !arFailed
+    var recall by remember { mutableIntStateOf(0) }
+    var aim by remember { mutableStateOf<Pair<Float, Float>?>(null) }
+    var tracking by remember { mutableStateOf<String?>(null) }
 
-        // 인물 — 대화를 시작한 방위에 고정
-        val offsetDeg = if (anchor.isNaN() || !orientation.available) 0f else angleDiff(orientation.heading, anchor)
-        val pxPerDeg = maxWidth.value / H_FOV
-        val x by animateFloatAsState(offsetDeg * pxPerDeg, label = "figure-x")
+    BoxWithConstraints(modifier = modifier.fillMaxSize().background(Color(0xFF1A140F))) {
+        if (use3d && model3d != null) {
+            FigureArScene(
+                model = model3d,
+                placement = FigurePlacement.InFront,
+                recall = recall,
+                onAim = { angle, dist -> aim = angle to dist },
+                onFailed = { arFailed = true },
+                modifier = Modifier.fillMaxSize(),
+                onTracking = { tracking = it },
+            )
+        } else if (hasCamera && !waitingAr) {
+            CameraBackground(Modifier.fillMaxSize())
+        }
+
+        // 인물 — 2D 는 대화를 시작한 방위에 고정, 3D 는 ARCore 가 실제 위치에 둔다
+        val offsetDeg = when {
+            use3d -> if (tracking == null) aim?.first ?: 0f else 0f
+            anchor.isNaN() || !orientation.available -> 0f
+            else -> angleDiff(orientation.heading, anchor)
+        }
         val outOfView = abs(offsetDeg) > H_FOV / 2 + 8
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(x = x.dp)
-                .fillMaxWidth(0.92f)
-                .fillMaxHeight(0.68f),
-            contentAlignment = Alignment.BottomCenter,
-        ) {
-            FigureCutout(figure, speaking = state.status == VoiceStatus.SPEAKING)
+        if (!use3d && !waitingAr) {
+            val pxPerDeg = maxWidth.value / H_FOV
+            val x by animateFloatAsState(offsetDeg * pxPerDeg, label = "figure-x")
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(x = x.dp)
+                    .fillMaxWidth(0.92f)
+                    .fillMaxHeight(0.68f),
+                contentAlignment = Alignment.BottomCenter,
+            ) {
+                FigureCutout(figure, speaking = state.status == VoiceStatus.SPEAKING)
+            }
         }
 
         // 위쪽 그림자 + 상단바
@@ -125,6 +159,21 @@ fun VoiceScreen(
                 .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))),
         )
         VoiceTopBar(state, onBack, onMute)
+
+        // 3D: 인물까지 거리 / 세우기 전 안내
+        if (use3d && figure != null) {
+            Text(
+                tracking ?: aim?.let { "${figure.name}까지 약 ${"%.1f".format(it.second)}m · 다가가 보세요" } ?: "주변 바닥을 비추면 ${figure.name}이(가) 나타나요",
+                color = Color.White,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = 64.dp)
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(14.dp))
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        }
 
         // 화면 밖으로 밀려났을 때 안내
         if (outOfView && figure != null) {
@@ -150,7 +199,14 @@ fun VoiceScreen(
             modifier = Modifier.align(Alignment.BottomCenter),
         ) {
             // 인물을 정면으로 다시 부르기
-            RoundIcon(Icons.Filled.Refresh, "정면으로 부르기") { if (orientation.available) anchor = orientation.heading }
+            RoundIcon(Icons.Filled.Refresh, "정면으로 부르기") {
+                if (use3d) {
+                    aim = null
+                    recall++
+                } else if (orientation.available) {
+                    anchor = orientation.heading
+                }
+            }
         }
     }
 }
