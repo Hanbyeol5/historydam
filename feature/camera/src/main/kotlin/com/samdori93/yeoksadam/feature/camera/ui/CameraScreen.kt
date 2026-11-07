@@ -1,5 +1,7 @@
 package com.samdori93.yeoksadam.feature.camera.ui
 
+import com.samdori93.yeoksadam.core.domain.repository.RelatedPerson
+import com.samdori93.yeoksadam.core.domain.usecase.RelatedFigure
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -67,6 +69,7 @@ fun CameraScreen(
     onEvent: (CameraUiEvent) -> Unit,
     onBack: () -> Unit,
     hasCameraPermission: Boolean = false,
+    onOpenFigure: (String) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -166,6 +169,10 @@ fun CameraScreen(
                         tts.stop()
                         onEvent(CameraUiEvent.Retake)
                     },
+                    onOpenFigure = {
+                        tts.stop()
+                        onOpenFigure(it)
+                    },
                 )
             }
         }
@@ -178,10 +185,15 @@ private fun ResultPanel(
     onSelect: (String) -> Unit,
     onSpeak: () -> Unit,
     onRetake: () -> Unit,
+    onOpenFigure: (String) -> Unit,
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         // 인식 태그 (출처 + 명칭 + 확신도)
-        val source = if (uiState.official != null) "국가유산청" else "AI 판별"
+        val source = when {
+            uiState.isFallback -> "판별 실패 · 가까운 국가유산"
+            uiState.official != null -> "국가유산청"
+            else -> "AI 판별"
+        }
         val confidence = uiState.identification?.confidence?.takeIf { it > 0 }?.let { " · ${it}%" }.orEmpty()
         Box(
             modifier = Modifier
@@ -262,6 +274,20 @@ private fun ResultPanel(
             }
             Spacer(Modifier.height(8.dp))
 
+            if (uiState.isFallback) {
+                Text(
+                    "사진 속 대상을 판별하지 못해, 지금 위치에서 가장 가까운 국가유산을 대신 보여 드려요. 대상을 화면 가득 비추고 다시 촬영해 보세요.",
+                    fontSize = 12.sp,
+                    lineHeight = 17.sp,
+                    color = Color.White,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(DancheongColors.Jujak.copy(alpha = 0.9f), RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                )
+                Spacer(Modifier.height(8.dp))
+            }
+
             when {
                 uiState.loadingDetail -> Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(color = DancheongColors.Jujak, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
@@ -280,8 +306,67 @@ private fun ResultPanel(
                 else -> Text("설명 정보가 없습니다.", fontSize = 12.sp, color = DancheongColors.MeokSoft)
             }
 
+            // 관련 인물 (텍스트) — 앱 인물은 누르면 인물 시트(대화하기), 그 밖의 인물은 AI 추정 소개
+            Spacer(Modifier.height(12.dp))
+            Text("관련 인물", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = DancheongColors.Jujak)
+            Spacer(Modifier.height(4.dp))
+            Column(Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState())) {
+                uiState.relatedFigures.forEach { r -> RelatedFigureRow(r, onClick = { onOpenFigure(r.figure.id) }) }
+                uiState.relatedPeople.forEach { p -> RelatedPersonRow(p) }
+                when {
+                    uiState.loadingRelated -> Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+                        CircularProgressIndicator(color = DancheongColors.Jujak, strokeWidth = 2.dp, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("관련 인물을 찾는 중…", fontSize = 12.sp, color = DancheongColors.MeokSoft)
+                    }
+                    uiState.relatedFigures.isEmpty() && uiState.relatedPeople.isEmpty() ->
+                        Text("기록된 관련 인물이 없어요.", fontSize = 12.sp, color = DancheongColors.MeokSoft, modifier = Modifier.padding(vertical = 6.dp))
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
             SmallButton("다시 촬영", Icons.Filled.Refresh, modifier = Modifier.fillMaxWidth(), onClick = onRetake)
+        }
+    }
+}
+
+/** 앱 인물 밖의 관련 인물 (AI 추정): 이름 · 생몰년 / 관계 / 소개 */
+@Composable
+private fun RelatedPersonRow(p: RelatedPerson) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 7.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(p.name, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DancheongColors.Meok)
+            Spacer(Modifier.width(6.dp))
+            Text(p.years, fontSize = 11.sp, color = DancheongColors.MeokSoft, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("AI 추정", fontSize = 10.sp, color = DancheongColors.MeokSoft)
+        }
+        Text(p.relation, fontSize = 12.sp, color = DancheongColors.CheongnokDeep, fontWeight = FontWeight.Medium)
+        if (p.summary.isNotBlank()) {
+            Text(p.summary, fontSize = 12.sp, lineHeight = 17.sp, color = DancheongColors.Meok)
+        }
+    }
+}
+
+/** 관련 인물 한 줄: 이름 · 호 · 생몰년 / 관계 / 인물 소개 */
+@Composable
+private fun RelatedFigureRow(r: RelatedFigure, onClick: () -> Unit) {
+    val f = r.figure
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 7.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(f.name, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DancheongColors.Meok)
+            val sub = listOf(f.title, f.years).filter { it.isNotBlank() }.joinToString(" · ")
+            Spacer(Modifier.width(6.dp))
+            Text(sub, fontSize = 11.sp, color = DancheongColors.MeokSoft, maxLines = 1, modifier = Modifier.weight(1f))
+            Text("대화하기 ›", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = DancheongColors.Jujak)
+        }
+        Text(r.reason, fontSize = 12.sp, color = DancheongColors.CheongnokDeep, fontWeight = FontWeight.Medium)
+        if (f.bio.isNotBlank()) {
+            Text(f.bio, fontSize = 12.sp, lineHeight = 17.sp, color = DancheongColors.Meok)
         }
     }
 }

@@ -1,5 +1,7 @@
 package com.samdori93.yeoksadam.feature.camera.viewmodel
 
+import com.samdori93.yeoksadam.core.domain.repository.RelatedPerson
+import com.samdori93.yeoksadam.core.domain.usecase.RelatedFigure
 import com.samdori93.yeoksadam.core.domain.model.HeritageVisionResult
 import com.samdori93.yeoksadam.core.domain.model.RecognizedHeritage
 
@@ -15,6 +17,12 @@ data class CameraUiState(
     val selectedId: String? = null,
     val loadingDetail: Boolean = false,
     val errorMessage: String? = null,
+    /** 사진과 관련된 인물 (텍스트로 보여 줌) */
+    val relatedFigures: List<RelatedFigure> = emptyList(),
+    /** 앱 인물 밖의 관련 역사 인물 (AI 추정, 텍스트) */
+    val relatedPeople: List<RelatedPerson> = emptyList(),
+    /** 관련 인물을 찾는 중 */
+    val loadingRelated: Boolean = false,
 ) {
     /** 표시 명칭: 공식(국가유산청) 우선, 없으면 AI 판별명. */
     val displayName: String
@@ -23,6 +31,10 @@ data class CameraUiState(
     /** 표시 해설: 공식 설명 우선, 없으면 AI 해설. */
     val description: String?
         get() = official?.description?.takeIf { it.isNotBlank() } ?: identification?.description
+
+    /** AI 판별에 실패해 가까운 국가유산을 대신 보여 주는 중 */
+    val isFallback: Boolean
+        get() = identification?.isFallback == true
 }
 
 /** 사용자 입력 이벤트. */

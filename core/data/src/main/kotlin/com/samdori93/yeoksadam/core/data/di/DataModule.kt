@@ -1,5 +1,7 @@
 package com.samdori93.yeoksadam.core.data.di
 
+import com.samdori93.yeoksadam.core.domain.repository.RelatedPeopleRepository
+import com.samdori93.yeoksadam.core.data.repository.RelatedPeopleRepositoryImpl
 import android.content.Context
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
@@ -36,6 +38,10 @@ abstract class DataModule {
     @Binds
     @Singleton
     abstract fun bindChatRepository(impl: ChatRepositoryImpl): ChatRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRelatedPeopleRepository(impl: RelatedPeopleRepositoryImpl): RelatedPeopleRepository
 
     @Binds
     @Singleton

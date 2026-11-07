@@ -1,5 +1,8 @@
 package com.samdori93.yeoksadam.feature.camera.viewmodel
 
+import kotlinx.coroutines.Job
+import com.samdori93.yeoksadam.core.domain.repository.RelatedPeopleRepository
+import com.samdori93.yeoksadam.core.domain.usecase.FindRelatedFiguresUseCase
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.samdori93.yeoksadam.core.common.result.Result
@@ -26,7 +29,11 @@ class CameraViewModel @Inject constructor(
     private val recognizePhoto: RecognizeHeritagePhotoUseCase,
     private val getHeritageDetail: GetHeritageDetailUseCase,
     private val recordDiscovery: RecordDiscoveryUseCase,
+    private val findRelatedFigures: FindRelatedFiguresUseCase,
+    private val relatedPeople: RelatedPeopleRepository,
 ) : ViewModel() {
+
+    private var relatedJob: Job? = null
 
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
@@ -59,6 +66,7 @@ class CameraViewModel @Inject constructor(
                     if (data.identification.isHeritage) {
                         recordDiscovery(toDiscovery(data))
                     }
+                    refreshRelatedFigures()
                 }
 
                 is Result.Failure -> _uiState.update {
@@ -75,8 +83,11 @@ class CameraViewModel @Inject constructor(
         _uiState.update { it.copy(selectedId = id, loadingDetail = true) }
         viewModelScope.launch {
             when (val result = getHeritageDetail(id)) {
-                is Result.Success -> _uiState.update {
-                    if (it.selectedId == id) it.copy(official = result.data, loadingDetail = false) else it
+                is Result.Success -> {
+                    _uiState.update {
+                        if (it.selectedId == id) it.copy(official = result.data, loadingDetail = false) else it
+                    }
+                    refreshRelatedFigures()
                 }
 
                 is Result.Failure -> _uiState.update {
@@ -87,6 +98,28 @@ class CameraViewModel @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * 인식한(또는 고른) 유적·유물과 관련된 인물.
+     *  1) 앱 인물: 관련 유적 연결 + 이름·해설 속 인물 이름 (바로 대화 가능)
+     *  2) 그 밖의 역사 인물: Gemini 가 해설을 보고 알려 준 인물 (AI 추정, 앱 인물과 이름이 같으면 뺌)
+     */
+    private fun refreshRelatedFigures() {
+        relatedJob?.cancel()
+        val s = _uiState.value
+        val subject = s.displayName
+        val description = s.description.orEmpty()
+        val texts = listOfNotNull(s.official?.name, s.official?.description, s.identification?.name, s.identification?.description)
+        _uiState.update { it.copy(relatedFigures = emptyList(), relatedPeople = emptyList(), loadingRelated = true) }
+        relatedJob = viewModelScope.launch {
+            val figures = findRelatedFigures(siteId = s.official?.id ?: s.selectedId, texts = texts)
+            _uiState.update { it.copy(relatedFigures = figures) }
+            val known = figures.map { it.figure.name }
+            val people = relatedPeople.suggest(subject, description)
+                .filter { p -> known.none { k -> p.name.contains(k) || k.contains(p.name) } }
+            _uiState.update { it.copy(relatedPeople = people, loadingRelated = false) }
         }
     }
 

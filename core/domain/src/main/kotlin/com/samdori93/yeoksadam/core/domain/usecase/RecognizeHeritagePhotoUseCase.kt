@@ -41,7 +41,7 @@ class RecognizeHeritagePhotoUseCase @Inject constructor(
         }
     }
 
-    /** GEMINI_API_KEY 미설정 등으로 AI 인식이 안 될 때, 가장 가까운 국가유산으로 대체. */
+    /** AI 판별(Gemini · 서버)이 모두 안 될 때, 가장 가까운 국가유산으로 대체 — 화면에 대체 결과임을 표시한다. */
     private suspend fun fallbackToNearest(candidates: List<RecognizedHeritage>): Result<PhotoRecognition>? {
         val nearest = candidates.firstOrNull() ?: return null
         val official = heritageRepository.getHeritageDetail(nearest.id).getOrNull()
@@ -49,10 +49,11 @@ class RecognizeHeritagePhotoUseCase @Inject constructor(
             name = official?.name ?: nearest.name,
             kind = official?.kind ?: nearest.kind,
             era = official?.era.orEmpty(),
-            description = "AI 이미지 인식 서버에 연결하지 못해, 현재 위치에서 가장 가까운 국가유산을 표시합니다. " +
+            description = "사진을 판별하지 못해, 현재 위치에서 가장 가까운 국가유산을 대신 보여 드려요. " +
                 "네트워크를 확인한 뒤 다시 촬영해 보세요.",
             matchedHeritageId = nearest.id,
             confidence = 0,
+            isFallback = true,
         )
         return Result.Success(PhotoRecognition(identification, candidates, official))
     }

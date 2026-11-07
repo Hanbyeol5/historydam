@@ -45,6 +45,7 @@ fun CameraRoute(
         onEvent = viewModel::onEvent,
         onBack = onBack,
         hasCameraPermission = hasCamera,
+        onOpenFigure = onOpenFigure,
         modifier = modifier,
     )
 }

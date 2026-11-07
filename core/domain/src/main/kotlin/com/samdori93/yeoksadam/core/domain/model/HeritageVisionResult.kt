@@ -13,6 +13,7 @@ data class HeritageVisionResult(
     val confidence: Int, // 0~100
     val isHeritage: Boolean = false, // 실제 문화재/유물/유적 여부(도감 기록 조건)
     val category: String = "", // "figure"(초상화·인물상) / "site"(건물·유적) / "relic"(유물)
+    val isFallback: Boolean = false, // AI 판별에 실패해 가까운 국가유산으로 대신 보여 주는 결과
 )
 
 /**
