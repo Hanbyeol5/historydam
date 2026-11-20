@@ -54,7 +54,8 @@
 | 인물 · 유적 자료, 초상 | 역사담 웹앱 데이터 (`samcho93.github.io/arHeritage/data/…`) |
 | 「기본」·「RAG 서버」 대화, 인물 보이스 TTS, 사진 인식 폴백 | 역사담 Cloudflare Worker (`yeoksadam-api`) |
 | 백엔드 RAG 대화, 사진 인식 · 관련 인물 추천 | 앱 안 (`core:backend`) → 공공기관 API · Gemini |
-| 3D 인물 모델 | `core/ui/src/main/assets/models/<인물 id>.glb` (저장소에 없음 — 아래 「3D 모델 파일」 참고) |
+| 3D 인물 모델 | **역사담 서버 저장소**(Worker `/model/<인물 이름>.glb`, Cloudflare KV)에서 받아 `filesDir/models/` 에 저장. 개발용으로 `core/ui/src/main/assets/models/<인물 id>.glb` 도 읽음 |
+| RAG 자료 · 인물 설정 | 서버 저장소의 `.md` 문서(인물에 연결된 조각)와 `/store/personas.json`(RAG 자료 편집기 「외부 RAG 인물 설정」)을 백엔드 RAG 가 사용 |
 | 팀 백엔드 원본 | [`backend/`](backend) (FastAPI, 직접 실행 시 「외부 RAG 서버」로 연결) |
 
 ## 실행하기
@@ -80,16 +81,23 @@ KDP_API_KEY=…                # 한국학자료통합플랫폼 (없으면 이 �
 >
 > 키는 빌드 시 앱에 들어갑니다. 발표 · 시연용이며, 일반 배포 전에는 키를 서버로 옮기고 새로 발급하세요.
 
-### 2) 3D 모델 파일 (커밋 금지)
+### 2) 3D 모델 · RAG 자료 (서버 저장소)
 
-정약용 3D 모델은 라이선스(Tripo AI 이용 조건 · 원본 초상 권리)와 고증 확인 전이라 저장소에 올리지 않았습니다.
-팀에서 받은 `jeong-yakyong.glb` 를 아래 위치에 직접 넣어 주세요.
+3D 모델은 저장소에 커밋하지 않고 **역사담 서버 저장소**에 올립니다 (시연용, 라이선스·고증 확인 전). 앱은 인물을 만나면 서버 목록(`/store/models.json`)에서 **인물 이름과 같은 파일**(예: `정약용.glb`)을 찾아 받아 두고, 받는 동안은 2D 컷아웃을 보여 줍니다.
 
-```
-core/ui/src/main/assets/models/jeong-yakyong.glb
-```
+**올리는 법 (관리자 폰)**
+1. 프로필 → **🗄 서버 저장소 (관리자)** 카드를 엽니다.
+2. **업로드 키**를 넣습니다. 서버 관리자에게 받습니다. Worker secret `UPLOAD_KEY` 이며, 로컬 사본은 arHeritage `worker/.dev.vars` 입니다.
+3. **3D 모델** 의 **폴더 지정** 으로 `.glb` 가 있는 폴더(예: Download/역사담3D)를 고릅니다. **RAG 자료** 도 같은 방식으로 `.md` 폴더를 고릅니다.
+4. 파일마다 상태가 표시됩니다(새 파일·바뀜·서버와 같음, 목록에 없는 이름 경고). **서버에 저장** 을 누릅니다.
+   - 파일 이름은 인물·유적 이름 그대로 씁니다 (`세종대왕.glb`, `태조 이성계.glb`, `수원 화성.md`).
+   - 3D 모델은 25MB 이하로 올립니다. 그보다 크면 `gltf-transform` 으로 압축합니다.
 
-- 등록된 모델 목록은 `core:ui` 의 `Figure3dModels`, 출처 · 권리 메모는 [`assets/figures/jeong-yakyong/license.json`](assets/figures/jeong-yakyong/license.json).
+RAG 자료 · 외부 RAG(백엔드 RAG) 인물 설정은 PC 에서 **[RAG 자료 편집기](https://samcho93.github.io/arHeritage/editor/)** 로도 고칠 수 있습니다 ([사용법](https://github.com/samcho93/arHeritage#rag-editor-usage)).
+
+형식·API 는 arHeritage [`docs/SERVER-STORAGE.md`](https://github.com/samcho93/arHeritage/blob/main/docs/SERVER-STORAGE.md) 를 봅니다.
+
+- 서버에 올라간 모델 목록은 `/store/models.json`. 출처 · 권리 메모는 [`assets/figures/jeong-yakyong/license.json`](assets/figures/jeong-yakyong/license.json).
 - 권리 확인이 끝나면 `license.json` 의 `rights` · `verifiedAt` 을 채운 뒤 커밋합니다.
 
 ### 3) 빌드 · 설치 · 검증

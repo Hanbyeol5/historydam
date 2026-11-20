@@ -69,7 +69,7 @@ import com.samdori93.yeoksadam.core.domain.model.ChatMessage
 import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.ui.ar.CameraBackground
-import com.samdori93.yeoksadam.core.ui.ar.Figure3dModels
+import com.samdori93.yeoksadam.core.ui.ar.rememberFigure3dModel
 import com.samdori93.yeoksadam.core.ui.ar.FigureArScene
 import com.samdori93.yeoksadam.core.ui.ar.FigurePlacement
 import com.samdori93.yeoksadam.core.ui.ar.rememberArCoreSupported
@@ -107,7 +107,7 @@ fun VoiceScreen(
     val figure = state.figure?.figure
 
     // 3D 모델이 있는 인물 + ARCore 지원 기기면 실제 공간에 사람 크기 3D 인물, 아니면 2D 컷아웃
-    val model3d = Figure3dModels.of(figure?.id)
+    val model3d = rememberFigure3dModel(figure?.id)
     val arSupported by rememberArCoreSupported()
     var arFailed by remember { mutableStateOf(false) }
     val use3d = hasCamera && model3d != null && arSupported == true && !arFailed

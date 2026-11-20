@@ -1,5 +1,16 @@
 package com.samdori93.yeoksadam.core.ui.ar
 
+import android.content.Context
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.platform.LocalContext
+import com.samdori93.yeoksadam.core.domain.model.FigureModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
@@ -38,17 +49,45 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * 3D 인물 모델 — assets/models/<figureId>.glb (core:ui). 모델이 있는 인물만 3D, 없으면 각 화면의 2D 표현.
+ * 3D 인물 모델 — 서버 저장소(역사담 Worker /model, 파일 이름 = 인물 이름)에서 받아 폰에 둔 glb 를 먼저 쓰고,
+ * 없으면 앱에 넣어 둔 assets/models/<figureId>.glb (개발용). 모델이 있는 인물만 3D, 없으면 각 화면의 2D 표현.
  * 라이선스 메모는 /assets/figures/<id>/license.json.
  */
 object Figure3dModels {
-    private val models = mapOf(
-        "jeong-yakyong" to Model("models/jeong-yakyong.glb", heightM = 1.65f),
+    /** 앱에 넣어 둘 수 있는 모델 (파일이 assets 에 실제로 있을 때만 쓴다) */
+    private val bundled = mapOf(
+        "jeong-yakyong" to Model(asset = "models/jeong-yakyong.glb", heightM = 1.65f),
     )
 
-    data class Model(val asset: String, val heightM: Float)
+    /** @param asset assets 경로, [file] 이 있으면 폰에 받아 둔 파일 경로를 쓴다 */
+    data class Model(val asset: String, val heightM: Float, val file: String? = null)
 
-    fun of(figureId: String?): Model? = figureId?.let { models[it.removePrefix("fig_")] }
+    fun of(context: Context, figureId: String?, downloaded: Map<String, FigureModel>): Model? {
+        val id = figureId?.removePrefix("fig_") ?: return null
+        downloaded[id]?.let { return Model(asset = "", heightM = it.heightM, file = it.filePath) }
+        val b = bundled[id] ?: return null
+        val present = runCatching { context.assets.list(b.asset.substringBeforeLast('/'))?.contains(b.asset.substringAfterLast('/')) }.getOrNull()
+        return b.takeIf { present == true }
+    }
+}
+
+/** 서버 3D 모델 공급 — MainActivity 가 ServerStoreRepository 로 채운다 */
+class FigureModelSource(
+    val models: StateFlow<Map<String, FigureModel>>,
+    val sync: suspend (figureId: String) -> Unit,
+)
+
+val LocalFigureModelSource = staticCompositionLocalOf<FigureModelSource?> { null }
+
+/** 인물의 3D 모델 (없으면 null). 처음 만나면 서버 목록을 확인해 받아 오고, 다 받으면 3D 로 바뀐다 */
+@Composable
+fun rememberFigure3dModel(figureId: String?): Figure3dModels.Model? {
+    val source = LocalFigureModelSource.current
+    val context = LocalContext.current
+    val empty = remember { MutableStateFlow<Map<String, FigureModel>>(emptyMap()) }
+    val downloaded by (source?.models ?: empty).collectAsState()
+    LaunchedEffect(figureId, source) { if (figureId != null) source?.sync(figureId) }
+    return remember(figureId, downloaded) { Figure3dModels.of(context, figureId, downloaded) }
 }
 
 /** 인물을 어디에 세울지 */
@@ -214,7 +253,8 @@ private class FigurePlacer(
         }
 
         val node = ModelNode(
-            modelInstance = modelLoader.createModelInstance(model.asset),
+            modelInstance = model.file?.let { path -> modelLoader.createModelInstance(readDirect(File(path))) }
+                ?: modelLoader.createModelInstance(model.asset),
             autoAnimate = true,
             scaleToUnits = model.heightM,
             centerOrigin = Position(x = 0f, y = -1f, z = 0f), // 발이 원점(바닥)에 오도록
@@ -270,3 +310,9 @@ private class FigurePlacer(
 
 private const val AVAILABILITY_POLLS = 20
 private const val AVAILABILITY_POLL_MS = 200L
+
+/** 폰에 받아 둔 glb → Filament 가 읽는 direct ByteBuffer */
+private fun readDirect(file: File): ByteBuffer {
+    val bytes = file.readBytes()
+    return ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).put(bytes).apply { rewind() }
+}

@@ -33,6 +33,11 @@ android {
         }
     }
 
+    // 네이티브 라이브러리(네이버 지도 엔진 등)를 APK 안에서 압축 — 내려받기 크기를 줄인다 (설치 시 풀림)
+    packaging {
+        jniLibs { useLegacyPackaging = true }
+    }
+
     // CPU 별 APK (네이버 지도 엔진이 CPU 마다 약 25MB) — 폰은 arm64-v8a, 에뮬레이터는 x86_64
     splits {
         abi {

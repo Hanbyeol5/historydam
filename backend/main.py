@@ -2,6 +2,7 @@ import asyncio
 import os
 import pickle
 import re  # HTML 태그 정제용 정규식
+import time
 import xml.etree.ElementTree as ET
 from urllib.parse import unquote
 from dotenv import load_dotenv
@@ -77,6 +78,43 @@ FIGURE_INFO = {
         ),
     },
 }
+
+
+# 🗄 역사담 서버 저장소의 인물 설정 — RAG 자료 편집기(/editor/) 「외부 RAG 인물 설정」 탭에서 고친 인물.
+#    5분마다 다시 읽고, 없거나 실패하면 위의 FIGURE_INFO 를 쓴다.
+STORE_BASE = os.getenv("STORE_BASE", "https://yeoksadam-api.samdori93.workers.dev").rstrip("/")
+STORE_APP_KEY = os.getenv("STORE_APP_KEY", "historydam-android-v1")
+_persona_cache = {"at": 0.0, "data": {}}
+
+
+def _norm_id(value: str) -> str:
+    """fig_sejong · jang-yeongsil · jang_yeongsil → sejong · jangyeongsil"""
+    return value.removeprefix("fig_").replace("-", "").replace("_", "")
+
+
+async def server_personas() -> dict:
+    now = time.time()
+    if now - _persona_cache["at"] < 300:
+        return _persona_cache["data"]
+    _persona_cache["at"] = now
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            res = await client.get(f"{STORE_BASE}/store/personas.json", headers={"X-App-Key": STORE_APP_KEY})
+            res.raise_for_status()
+            figures = res.json().get("figures", {})
+            _persona_cache["data"] = {
+                _norm_id(k): {
+                    "name": v["name"],
+                    "era": v.get("era", ""),
+                    "max_year": v.get("maxYear", 2026),
+                    "keyword": v["keyword"],
+                    "persona": v["persona"],
+                }
+                for k, v in figures.items()
+            }
+    except Exception as e:
+        print(f"⚠️ [서버 인물 설정] 읽기 실패: {e} (코드의 기본 설정 사용)")
+    return _persona_cache["data"]
 
 
 def clean_text(text: str) -> str:
@@ -295,7 +333,7 @@ async def ask_history_figure(request: QuestionRequest):
     figure_id = request.figureId
     user_question = request.question
 
-    info = FIGURE_INFO.get(
+    info = (await server_personas()).get(_norm_id(figure_id)) or FIGURE_INFO.get(
         figure_id,
         {
             "name": figure_id,

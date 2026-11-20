@@ -69,7 +69,7 @@ import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
 import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
 import com.samdori93.yeoksadam.core.domain.model.NearbySite
 import com.samdori93.yeoksadam.core.ui.ar.CameraBackground
-import com.samdori93.yeoksadam.core.ui.ar.Figure3dModels
+import com.samdori93.yeoksadam.core.ui.ar.rememberFigure3dModel
 import com.samdori93.yeoksadam.core.ui.ar.FigureArScene
 import com.samdori93.yeoksadam.core.ui.ar.FigurePlacement
 import com.samdori93.yeoksadam.core.ui.ar.rememberArCoreSupported
@@ -118,7 +118,7 @@ fun ArScreen(
     val orientation by rememberCameraOrientation()
 
     // 찾아가는 인물에게 3D 모델이 있고 ARCore 를 쓸 수 있으면, 카메라 화면 위 실제 공간에 사람 크기로 세운다
-    val model3d = Figure3dModels.of(state.targetFigure?.id).takeIf { state.target != null }
+    val model3d = rememberFigure3dModel(state.targetFigure?.id).takeIf { state.target != null }
     val arSupported by rememberArCoreSupported()
     var arFailed by remember { mutableStateOf(false) }
     val use3d = hasCamera && model3d != null && arSupported == true && !arFailed

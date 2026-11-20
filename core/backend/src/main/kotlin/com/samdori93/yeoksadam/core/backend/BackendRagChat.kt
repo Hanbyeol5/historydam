@@ -9,6 +9,7 @@ import com.samdori93.yeoksadam.core.domain.model.Figure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
+import com.samdori93.yeoksadam.core.domain.repository.ServerStoreRepository
 import com.samdori93.yeoksadam.core.backend.source.GeminiTextDataSource
 import com.samdori93.yeoksadam.core.backend.source.PublicArchiveDataSource
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,6 +34,7 @@ class BackendRagChat @Inject constructor(
     private val gemini: GeminiTextDataSource,
     private val figures: FigureRepository,
     private val catalog: CatalogRepository,
+    private val store: ServerStoreRepository,
     private val dispatchers: DispatcherProvider,
 ) {
     private val classifier by lazy {
@@ -43,9 +45,21 @@ class BackendRagChat @Inject constructor(
     suspend fun ask(figureId: String, question: String, boundary: Boolean): ChatMessage = withContext(dispatchers.io) {
         archives.prefetch() // 검색어를 받지 않는 지식이음 목록 3개를 뒤에서 미리 받아 둔다
         val figure = figureOf(figureId)
-        val persona = personaOf(figureId, figure)
+        // 서버(RAG 자료 편집기 「외부 RAG 인물 설정」)에서 고친 인물 설정이 있으면 그것을 쓴다
+        val persona = store.personas()[figureId.removePrefix("fig_")]
+            ?.let { Persona(name = it.name, era = it.era, maxYear = it.maxYear, keyword = it.keyword, persona = it.persona) }
+            ?: personaOf(figureId, figure)
         val keyword = optimizedQuery(persona.keyword, question)
-        val contexts = if (classifier.isHistoryQuestion(question)) search(keyword, sitesOf(figure)) else emptyList()
+        val contexts = if (classifier.isHistoryQuestion(question)) {
+            // 서버에 올린 RAG 자료(이 인물·유적에 연결된 .md) + 공공기관 자료 7곳
+            coroutineScope {
+                val uploaded = async { store.contextFor(figureId).map { "[출처: 역사담 자료 · ${it.source}] ${it.text}" } }
+                val found = async { search(keyword, sitesOf(figure)) }
+                uploaded.await() + found.await()
+            }
+        } else {
+            emptyList()
+        }
         val answer = gemini.generate(prompt(persona, contexts, question, boundary))
         ChatMessage(role = Role.FIGURE, text = answer, citations = contexts.map(::citationOf))
     }
