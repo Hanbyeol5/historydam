@@ -56,10 +56,14 @@ import kotlin.math.sqrt
 object Figure3dModels {
     /** 앱에 넣어 둘 수 있는 모델 (파일이 assets 에 실제로 있을 때만 쓴다) */
     private val bundled = mapOf(
-        "jeong-yakyong" to Model(asset = "models/jeong-yakyong.glb", heightM = 1.65f),
+        // 조선 후기 성인 남성 평균 키 약 161cm + 관모 → 모델 전체(관모 포함) 1.70m
+        "jeong-yakyong" to Model(asset = "models/jeong-yakyong.glb", heightM = 1.70f),
     )
 
-    /** @param asset assets 경로, [file] 이 있으면 폰에 받아 둔 파일 경로를 쓴다 */
+    /**
+     * @param asset assets 경로, [file] 이 있으면 폰에 받아 둔 파일 경로를 쓴다
+     * @param heightM 발끝부터 머리 장식 꼭대기까지 실제 키(m)
+     */
     data class Model(val asset: String, val heightM: Float, val file: String? = null)
 
     fun of(context: Context, figureId: String?, downloaded: Map<String, FigureModel>): Model? {
@@ -122,7 +126,7 @@ fun rememberArCoreSupported(): State<Boolean?> {
 /**
  * ARCore 로 실제 공간에 사람 크기 3D 인물을 세운다 (카메라 화면도 이 장면이 그린다).
  * 실제 키([Figure3dModels.Model.heightM])로 맞추므로 다가가면 커지고 멀어지면 작아진다 — ARCore 가 폰 이동을 추적.
- * 인물은 늘 사용자를 바라본다.
+ * 인물은 세워질 때 사용자를 바라보고 그 자리에 고정된다 — 주위를 돌면 옆모습 · 뒷모습이 보인다.
  *
  * @param recall 값이 바뀌면 인물을 지운 뒤 [placement] 대로 다시 세운다
  * @param onAim 화면 정면 기준 인물 방향(도, 오른쪽 +)과 거리(m)
@@ -168,7 +172,7 @@ fun FigureArScene(
     )
 }
 
-/** 인물을 세우고(앵커) 매 프레임 사용자 쪽으로 돌린다 */
+/** 인물을 세우고(앵커) 발을 실제 바닥에 맞춘다 */
 private class FigurePlacer(
     private val model: Figure3dModels.Model,
     private val modelLoader: ModelLoader,
@@ -177,6 +181,12 @@ private class FigurePlacer(
     private var anchorNode: AnchorNode? = null
     private var modelNode: ModelNode? = null
     private var trackedFrames = 0
+
+    /** 바닥을 못 찾고 눈높이로 어림해 세웠는지 — 그렇다면 바닥을 찾는 대로 발 높이를 맞춘다 */
+    private var floorEstimated = false
+
+    /** centerOrigin 이 발을 원점에 맞추려고 잡은 모델 위치 — 바닥 보정은 여기에 더한다 */
+    private var basePosition = Position()
 
     private var lastTracking: String? = null
 
@@ -208,6 +218,7 @@ private class FigurePlacer(
         anchorNode = null
         modelNode = null
         trackedFrames = 0
+        floorEstimated = false
     }
 
     /** @return (화면 정면 기준 각도 · 오른쪽 +, 거리 m) */
@@ -218,10 +229,11 @@ private class FigurePlacer(
         if (anchorNode == null) place(session, frame, cam, view, placement) ?: return null
 
         val target = anchorNode?.anchor?.pose ?: return null
+        if (floorEstimated) {
+            floorY(session, cam)?.let { y -> modelNode?.position = basePosition + Position(y = y - target.ty()) }
+        }
         val dx = target.tx() - cam.tx()
         val dz = target.tz() - cam.tz()
-        // 모델 정면(+Z)이 카메라를 향하도록 세로축으로만 회전
-        modelNode?.rotation = Rotation(y = Math.toDegrees(atan2(-dx, -dz).toDouble()).toFloat())
 
         val (fx, fz) = flatForward(cam)
         // 정면 → 인물 방향의 시계 방향 각도 (오른쪽 +)
@@ -251,6 +263,8 @@ private class FigurePlacer(
                 floor?.translation ?: if (trackedFrames > FALLBACK_AFTER_FRAMES) toward(cam, 0f, FALLBACK_DIST_M) else return null
             }
         }
+        val onFloorHit = placement is FigurePlacement.InFront && trackedFrames <= FALLBACK_AFTER_FRAMES
+        if (!onFloorHit) floorY(session, cam)?.let { at[1] = it } ?: run { floorEstimated = true }
 
         val node = ModelNode(
             modelInstance = model.file?.let { path -> modelLoader.createModelInstance(readDirect(File(path))) }
@@ -258,14 +272,32 @@ private class FigurePlacer(
             autoAnimate = true,
             scaleToUnits = model.heightM,
             centerOrigin = Position(x = 0f, y = -1f, z = 0f), // 발이 원점(바닥)에 오도록
-        )
+        ).apply {
+            // 세우는 순간 모델 정면(+Z)이 사용자를 보게 한 번만 돌린다 — 이후 고정이라 뒤로 돌아가면 뒷모습
+            rotation = Rotation(y = Math.toDegrees(atan2(cam.tx() - at[0], cam.tz() - at[2]).toDouble()).toFloat())
+        }
         val anchor = AnchorNode(modelLoader.engine, session.createAnchor(Pose.makeTranslation(at[0], at[1], at[2])))
+        basePosition = node.position
         anchor.addChildNode(node)
         nodes += anchor
         anchorNode = anchor
         modelNode = node
         return Unit
     }
+
+    /**
+     * 추적 중인 위쪽 수평면 가운데 발밑 높이(폰 아래 [FLOOR_MIN_BELOW_M]~[FLOOR_MAX_BELOW_M])에서 가장 낮은 면 = 바닥.
+     * 탁자 · 의자 면보다 바닥을 고르려고 가장 낮은 것. 못 찾으면 null
+     */
+    private fun floorY(session: Session, cam: Pose): Float? = session.getAllTrackables(Plane::class.java)
+        .asSequence()
+        .filter {
+            it.trackingState == TrackingState.TRACKING && it.subsumedBy == null &&
+                it.type == Plane.Type.HORIZONTAL_UPWARD_FACING
+        }
+        .map { it.centerPose.ty() }
+        .filter { cam.ty() - it in FLOOR_MIN_BELOW_M..FLOOR_MAX_BELOW_M }
+        .minOrNull()
 
     /** 화면 정면을 수평으로 편 방향에서 [deltaDeg](오른쪽 +) 돌린 쪽으로 [dist]m, 높이는 발밑(폰 높이 - 1.45m) */
     private fun toward(cam: Pose, deltaDeg: Float, dist: Float): FloatArray {
@@ -304,6 +336,8 @@ private class FigurePlacer(
         const val FALLBACK_AFTER_FRAMES = 75 // 약 2.5초
         const val FALLBACK_DIST_M = 2.2f
         const val EYE_HEIGHT_M = 1.45f
+        const val FLOOR_MIN_BELOW_M = 0.5f
+        const val FLOOR_MAX_BELOW_M = 2.2f
         const val STEEP_LEN = 0.35f
     }
 }
