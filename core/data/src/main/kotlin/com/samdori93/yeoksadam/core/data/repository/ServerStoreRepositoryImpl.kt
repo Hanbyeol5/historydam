@@ -136,8 +136,6 @@ class ServerStoreRepositoryImpl @Inject constructor(
     }
 
     // ---------- 관리자 ----------
-    override val uploadKey: Flow<String> = admin.uploadKey
-    override suspend fun setUploadKey(key: String) = admin.setUploadKey(key)
     override fun folder(kind: StoreKind): Flow<String?> = admin.folder(kind.name)
 
     override suspend fun setFolder(kind: StoreKind, treeUri: String) {
@@ -186,8 +184,6 @@ class ServerStoreRepositoryImpl @Inject constructor(
     }
 
     override suspend fun upload(kind: StoreKind, file: LocalStoreFile, heightM: Float?): UploadResult = withContext(dispatchers.io) {
-        val key = admin.uploadKey.first()
-        require(key.isNotBlank()) { "업로드 키를 먼저 넣어 주세요." }
         val uri = Uri.parse(file.uri)
         val body = object : RequestBody() {
             override fun contentType() = (if (kind == StoreKind.MODEL) "model/gltf-binary" else "text/markdown; charset=utf-8").toMediaType()
@@ -199,8 +195,8 @@ class ServerStoreRepositoryImpl @Inject constructor(
         val fileName = "${file.name}.${kind.ext}"
         val res = try {
             when (kind) {
-                StoreKind.MODEL -> api.putModel(fileName, key, file.sha256, heightM?.toString(), body)
-                StoreKind.DOC -> api.putDoc(fileName, key, body)
+                StoreKind.MODEL -> api.putModel(fileName, file.sha256, heightM?.toString(), body)
+                StoreKind.DOC -> api.putDoc(fileName, body)
             }
         } catch (e: HttpException) {
             throw IllegalStateException(errorMessage(e))
@@ -213,7 +209,6 @@ class ServerStoreRepositoryImpl @Inject constructor(
         val raw = runCatching { e.response()?.errorBody()?.string() }.getOrNull().orEmpty()
         val msg = Regex("\"error\"\\s*:\\s*\"([^\"]+)\"").find(raw)?.groupValues?.get(1)
         return msg ?: when (e.code()) {
-            401 -> "업로드 키가 올바르지 않습니다."
             413 -> "파일이 너무 큽니다."
             else -> "서버 오류 ${e.code()}"
         }

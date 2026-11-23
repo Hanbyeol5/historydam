@@ -115,32 +115,8 @@ private fun ProfileContent(
             Icon(Icons.Filled.MoreHoriz, "더보기", tint = DancheongColors.Meok, modifier = Modifier.size(24.dp))
         }
 
-        // 내 카드
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .background(DancheongColors.HanjiCard, RoundedCornerShape(18.dp))
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            MonoMedallion(text = "희", size = 56.dp)
-            Spacer(Modifier.width(14.dp))
-            Column {
-                Text("희수", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = DancheongColors.Meok)
-                Text("역사 탐험가", fontSize = 12.sp, color = DancheongColors.MeokSoft)
-                Spacer(Modifier.size(4.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Icon(Icons.Filled.Star, null, tint = DancheongColors.Hwangto, modifier = Modifier.size(13.dp))
-                    Text(
-                        "발견 ${discoveries.size} · 만난 인물 ${figureCount}명",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = DancheongColors.CheongnokDeep,
-                    )
-                }
-            }
-        }
+        // 내 계정 (로그인 · 서버 저장 기록 · 내 질문 퀴즈)
+        AccountCard(discoveryCount = discoveries.size, figureCount = figureCount)
 
         // 설정 (대화 방식 · 지식 경계 · 대화 기록)
         SettingsCard()

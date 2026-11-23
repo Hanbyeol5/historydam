@@ -28,9 +28,6 @@ interface ServerStoreRepository {
     suspend fun contextFor(figureId: String): List<StoreContext>
 
     // ---------- 관리자: 폴더 업로드 ----------
-    val uploadKey: Flow<String>
-    suspend fun setUploadKey(key: String)
-
     /** 종류별로 지정한 폰 폴더(문서 트리 URI) */
     fun folder(kind: StoreKind): Flow<String?>
     suspend fun setFolder(kind: StoreKind, treeUri: String)

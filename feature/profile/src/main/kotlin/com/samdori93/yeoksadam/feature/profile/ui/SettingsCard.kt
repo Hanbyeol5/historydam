@@ -136,13 +136,21 @@ fun SettingsCard(modifier: Modifier = Modifier, viewModel: SettingsViewModel = h
                     )
                 }
             }
-            Option(
-                selected = s.boundary,
-                title = "지식 경계 필터",
-                desc = "인물은 세상을 떠난 해 이후의 일을 모른다고 답해요. RAG 서버 방식에서는 사후의 기록을 검색에서 빼요. (해설사는 해당 없음)",
-                radio = false,
-                onClick = { viewModel.update { it.copy(boundary = !it.boundary) } },
-            )
+            // 지식 경계는 늘 켠다 — 끌 수 없다
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DancheongColors.Hanji, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+            ) {
+                Text("지식 경계 · 늘 켜짐", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DancheongColors.Meok)
+                Text(
+                    "인물은 세상을 떠난 해 이후의 일(연도·사건·근대 문물·후대 인물)을 물으면 답을 지어내지 않고 모른다고 답해요. RAG 서버 방식에서는 사후의 기록도 검색에서 빼요. (해설사는 해당 없음)",
+                    fontSize = 11.5.sp,
+                    lineHeight = 16.sp,
+                    color = DancheongColors.MeokSoft,
+                )
+            }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                 Text(
                     if (rooms > 0) "대화 기록: 인물 ${rooms}명과의 대화가 저장됨" else "대화 기록: 저장된 대화 없음",

@@ -79,6 +79,12 @@ abstract class DataModule {
 
     @Binds
     @Singleton
+    abstract fun bindAccountRepository(
+        impl: com.samdori93.yeoksadam.core.data.repository.AccountRepositoryImpl,
+    ): com.samdori93.yeoksadam.core.domain.repository.AccountRepository
+
+    @Binds
+    @Singleton
     abstract fun bindDispatcherProvider(impl: DefaultDispatcherProvider): DispatcherProvider
 
     companion object {

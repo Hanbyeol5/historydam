@@ -9,6 +9,8 @@ import com.samdori93.yeoksadam.core.domain.model.ChatMessage
 import com.samdori93.yeoksadam.core.domain.model.ChatMode
 import com.samdori93.yeoksadam.core.domain.model.Citation
 import com.samdori93.yeoksadam.core.domain.model.Role
+import com.samdori93.yeoksadam.core.domain.repository.AccountRepository
+import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.ChatRepository
 import com.samdori93.yeoksadam.core.domain.repository.SettingsRepository
 import com.samdori93.yeoksadam.core.network.worker.ExternalBody
@@ -43,6 +45,8 @@ class ChatRepositoryImpl @Inject constructor(
     private val chatDao: ChatDao,
     private val settingsRepository: SettingsRepository,
     private val backendRag: BackendRagChat,
+    private val account: AccountRepository,
+    private val catalog: CatalogRepository,
     private val json: Json,
 ) : ChatRepository {
 
@@ -55,11 +59,12 @@ class ChatRepositoryImpl @Inject constructor(
         val reply = try {
             when (settings.mode) {
                 ChatMode.EXTERNAL -> external(settings.externalUrl, figureId, message)
-                ChatMode.BACKEND -> backendRag.ask(figureId, message, settings.boundary)
+                ChatMode.BACKEND -> backendRag.ask(figureId, message)
                 else -> {
                     val lines = chatDao.recent(figureId, HISTORY_LIMIT)
                         .map { TalkLine(mine = it.role == Role.USER.name, text = it.text) }
-                    val body = TalkBody(figureId = figureId, lines = lines, boundary = settings.boundary)
+                    // 지식 경계는 늘 켠다 (인물 사후의 일은 답하지 않음)
+                    val body = TalkBody(figureId = figureId, lines = lines, boundary = true)
                     val r = if (settings.mode == ChatMode.RAG) worker.rag(body) else worker.chat(body)
                     ChatMessage(
                         role = Role.FIGURE,
@@ -88,6 +93,9 @@ class ChatRepositoryImpl @Inject constructor(
                     ),
                 ),
             )
+            // 로그인했으면 서버의 사용자 파일에도 저장. RAG 근거(출처) 없이 답했으면 서버가 이 사용자의 RAG 자료로 배운다
+            val figure = catalog.figure(figureId.removePrefix("fig_"))
+            account.log(figureId, figure?.name, settings.mode.name, message, reply.text, reply.citations.isNotEmpty(), figure?.died)
         }
         emit(reply)
     }

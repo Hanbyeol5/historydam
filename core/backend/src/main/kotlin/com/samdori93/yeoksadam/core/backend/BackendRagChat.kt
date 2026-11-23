@@ -10,6 +10,7 @@ import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.domain.repository.CatalogRepository
 import com.samdori93.yeoksadam.core.domain.repository.FigureRepository
 import com.samdori93.yeoksadam.core.domain.repository.ServerStoreRepository
+import com.samdori93.yeoksadam.core.domain.repository.AccountRepository
 import com.samdori93.yeoksadam.core.backend.source.GeminiTextDataSource
 import com.samdori93.yeoksadam.core.backend.source.PublicArchiveDataSource
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -35,32 +36,48 @@ class BackendRagChat @Inject constructor(
     private val figures: FigureRepository,
     private val catalog: CatalogRepository,
     private val store: ServerStoreRepository,
+    private val account: AccountRepository,
     private val dispatchers: DispatcherProvider,
 ) {
     private val classifier by lazy {
         IntentClassifier.fromJson(context.assets.open(MODEL_ASSET).bufferedReader(Charsets.UTF_8).use { it.readText() })
     }
 
-    /** @param boundary 지식 경계 필터(설정) — 켜져 있으면 백엔드의 원칙 4(세상을 떠난 뒤의 일은 모른다)를 넣는다 */
-    suspend fun ask(figureId: String, question: String, boundary: Boolean): ChatMessage = withContext(dispatchers.io) {
+    /**
+     * 지식 경계는 늘 켠다: 사후의 일을 묻는 질문은 [KnowledgeBoundary] 가 LLM 없이 거절하고,
+     * 프롬프트에도 원칙 4(세상을 떠난 뒤의 일은 모른다)를 넣는다. [boundary] 는 예전 설정 호환용으로만 받는다.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun ask(figureId: String, question: String, boundary: Boolean = true): ChatMessage = withContext(dispatchers.io) {
         archives.prefetch() // 검색어를 받지 않는 지식이음 목록 3개를 뒤에서 미리 받아 둔다
         val figure = figureOf(figureId)
         // 서버(RAG 자료 편집기 「외부 RAG 인물 설정」)에서 고친 인물 설정이 있으면 그것을 쓴다
         val persona = store.personas()[figureId.removePrefix("fig_")]
             ?.let { Persona(name = it.name, era = it.era, maxYear = it.maxYear, keyword = it.keyword, persona = it.persona) }
             ?: personaOf(figureId, figure)
+        val died = figure?.died ?: persona.maxYear.takeIf { it < 2000 }
+        if (died != null) {
+            val later = catalog.figures().getOrNull().orEmpty()
+                .filter { it.id != figure?.id }
+                .map { it.name.split(' ').last().removeSuffix("대왕") to (Regex("\\d{4}").find(it.years)?.value?.toInt() ?: 0) }
+            if (KnowledgeBoundary.afterDeath(question, died, later) != null) {
+                return@withContext ChatMessage(role = Role.FIGURE, text = KnowledgeBoundary.reply(figure?.style, died))
+            }
+        }
         val keyword = optimizedQuery(persona.keyword, question)
         val contexts = if (classifier.isHistoryQuestion(question)) {
             // 서버에 올린 RAG 자료(이 인물·유적에 연결된 .md) + 공공기관 자료 7곳
             coroutineScope {
                 val uploaded = async { store.contextFor(figureId).map { "[출처: 역사담 자료 · ${it.source}] ${it.text}" } }
+                // 로그인 사용자가 전에 물어 배운 질문·답 (이 사용자의 RAG 자료)
+                val mine = async { account.learnedContext(figureId).map { "[출처: ${it.source}] ${it.text}" } }
                 val found = async { search(keyword, sitesOf(figure)) }
-                uploaded.await() + found.await()
+                uploaded.await() + mine.await() + found.await()
             }
         } else {
             emptyList()
         }
-        val answer = gemini.generate(prompt(persona, contexts, question, boundary))
+        val answer = gemini.generate(prompt(persona, contexts, question, true))
         ChatMessage(role = Role.FIGURE, text = answer, citations = contexts.map(::citationOf))
     }
 

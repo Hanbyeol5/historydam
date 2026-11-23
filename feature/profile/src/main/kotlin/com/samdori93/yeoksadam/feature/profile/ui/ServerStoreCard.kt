@@ -43,11 +43,9 @@ import com.samdori93.yeoksadam.core.domain.model.SyncState
 import com.samdori93.yeoksadam.core.domain.repository.ServerStoreRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -72,7 +70,6 @@ class ServerStoreViewModel @Inject constructor(
     val sections: StateFlow<Map<StoreKind, Section>> = _sections.asStateFlow()
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
-    val uploadKey: StateFlow<String> = repo.uploadKey.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
     init {
         StoreKind.entries.forEach { kind ->
@@ -86,10 +83,6 @@ class ServerStoreViewModel @Inject constructor(
     }
 
     private fun edit(kind: StoreKind, f: (Section) -> Section) = _sections.update { it + (kind to f(it.getValue(kind))) }
-
-    fun setKey(key: String) {
-        viewModelScope.launch { repo.setUploadKey(key) }
-    }
 
     fun setFolder(kind: StoreKind, uri: Uri) {
         viewModelScope.launch { repo.setFolder(kind, uri.toString()) }
@@ -137,10 +130,8 @@ class ServerStoreViewModel @Inject constructor(
 @Composable
 fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewModel = hiltViewModel()) {
     val sections by viewModel.sections.collectAsStateWithLifecycle()
-    val key by viewModel.uploadKey.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
     var open by rememberSaveable { mutableStateOf(false) }
-    var keyInput by rememberSaveable(key) { mutableStateOf(key) }
     var height by rememberSaveable { mutableStateOf("1.65") }
 
     Column(
@@ -169,21 +160,10 @@ fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewMod
                 lineHeight = 16.sp,
                 color = DancheongColors.MeokSoft,
             )
-            Field(
-                label = "업로드 키",
-                value = keyInput,
-                placeholder = "관리자에게 받은 키",
-                password = true,
-                onChange = {
-                    keyInput = it
-                    viewModel.setKey(it)
-                },
-            )
             StoreKind.entries.forEach { kind ->
                 FolderSection(
                     kind = kind,
                     section = sections.getValue(kind),
-                    canUpload = key.isNotBlank(),
                     height = height,
                     onHeight = { height = it },
                     onFolder = { viewModel.setFolder(kind, it) },
@@ -211,7 +191,6 @@ fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewMod
 private fun FolderSection(
     kind: StoreKind,
     section: ServerStoreViewModel.Section,
-    canUpload: Boolean,
     height: String,
     onHeight: (String) -> Unit,
     onFolder: (Uri) -> Unit,
@@ -267,15 +246,12 @@ private fun FolderSection(
                 }
                 when {
                     f.uri in section.busy -> Text("저장 중…", fontSize = 12.sp, color = DancheongColors.MeokSoft)
-                    f.state != SyncState.SAME -> Chip("서버에 저장", primary = true, enabled = canUpload) { onUpload(listOf(f)) }
+                    f.state != SyncState.SAME -> Chip("서버에 저장", primary = true) { onUpload(listOf(f)) }
                 }
             }
         }
         if (pending.size > 1) {
-            Chip("바뀐 것 모두 저장 (${pending.size})", primary = true, enabled = canUpload && section.busy.isEmpty()) { onUpload(pending) }
-        }
-        if (!canUpload && pending.isNotEmpty()) {
-            Text("업로드 키를 넣으면 저장할 수 있어요.", fontSize = 11.sp, color = DancheongColors.Jujak)
+            Chip("바뀐 것 모두 저장 (${pending.size})", primary = true, enabled = section.busy.isEmpty()) { onUpload(pending) }
         }
     }
 }
