@@ -5,11 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.samdori93.yeoksadam.core.domain.model.ChatMessage
-import com.samdori93.yeoksadam.core.domain.model.ChatMode
 import com.samdori93.yeoksadam.core.domain.model.NearbyFigure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.domain.repository.ChatRepository
-import com.samdori93.yeoksadam.core.domain.repository.SettingsRepository
 import com.samdori93.yeoksadam.core.domain.usecase.GetFigureWithSiteUseCase
 import com.samdori93.yeoksadam.feature.chat.navigation.Chat
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -25,8 +23,6 @@ data class ChatUiState(
     val input: String = "",
     val responding: Boolean = false,
     val figure: NearbyFigure? = null,
-    /** 대화 방식 표시 (RAG · 외부 RAG), 기본이면 null */
-    val modeBadge: String? = null,
     /** 저장하지 않는 안내 (오류 등) */
     val notice: String? = null,
 )
@@ -39,7 +35,6 @@ data class ChatUiState(
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val chatRepository: ChatRepository,
-    settingsRepository: SettingsRepository,
     getFigure: GetFigureWithSiteUseCase,
 ) : ViewModel() {
 
@@ -57,17 +52,6 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             chatRepository.getChatHistory(figureId).collect { history ->
                 _uiState.update { it.copy(messages = withGreeting(history, it.figure)) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.settings.collect { s ->
-                val badge = when (s.mode) {
-                    ChatMode.RAG -> "RAG"
-                    ChatMode.EXTERNAL -> "외부 RAG"
-                    ChatMode.BACKEND -> "백엔드 RAG"
-                    ChatMode.BASIC -> null
-                }
-                _uiState.update { it.copy(modeBadge = badge) }
             }
         }
     }

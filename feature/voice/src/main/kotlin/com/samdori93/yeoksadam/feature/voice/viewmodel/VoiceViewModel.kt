@@ -16,11 +16,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import com.samdori93.yeoksadam.core.common.result.Result
 import com.samdori93.yeoksadam.core.domain.model.ChatMessage
-import com.samdori93.yeoksadam.core.domain.model.ChatMode
 import com.samdori93.yeoksadam.core.domain.model.NearbyFigure
 import com.samdori93.yeoksadam.core.domain.model.Role
 import com.samdori93.yeoksadam.core.domain.repository.ChatRepository
-import com.samdori93.yeoksadam.core.domain.repository.SettingsRepository
 import com.samdori93.yeoksadam.core.domain.usecase.GetFigureWithSiteUseCase
 import com.samdori93.yeoksadam.feature.voice.navigation.Voice
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -54,7 +52,6 @@ data class VoiceUiState(
     /** 연속 대화: 답을 마치면 다시 듣기 */
     val conversing: Boolean = false,
     val muted: Boolean = false,
-    val modeBadge: String? = null,
     /** 저장하지 않는 안내 (오류·권한) */
     val notice: String? = null,
     /** 이어 온 대화면 마지막으로 이야기한 기록이 있다는 표시 */
@@ -71,7 +68,6 @@ class VoiceViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     @ApplicationContext private val context: Context,
     private val chatRepository: ChatRepository,
-    settingsRepository: SettingsRepository,
     getFigure: GetFigureWithSiteUseCase,
 ) : ViewModel() {
 
@@ -110,17 +106,6 @@ class VoiceViewModel @Inject constructor(
             }
             chatRepository.getChatHistory(figureId).collect { list ->
                 _uiState.update { it.copy(lines = listOfNotNull(hello) + list) }
-            }
-        }
-        viewModelScope.launch {
-            settingsRepository.settings.collect { s ->
-                val badge = when (s.mode) {
-                    ChatMode.RAG -> "RAG"
-                    ChatMode.EXTERNAL -> "외부 RAG"
-                    ChatMode.BACKEND -> "백엔드 RAG"
-                    ChatMode.BASIC -> null
-                }
-                _uiState.update { it.copy(modeBadge = badge) }
             }
         }
     }

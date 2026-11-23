@@ -233,10 +233,6 @@ internal fun VoiceTopBar(state: VoiceUiState, onBack: () -> Unit, onMute: () -> 
                 modifier = Modifier.background(DancheongColors.Jujak, RoundedCornerShape(8.dp)).padding(horizontal = 6.dp, vertical = 1.dp))
             Text(figure?.name ?: "…", color = Color.White, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Text(figure?.title.orEmpty(), color = Color.White.copy(alpha = 0.75f), fontSize = 11.sp, maxLines = 1, modifier = Modifier.weight(1f))
-            state.modeBadge?.let {
-                Text(it, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier.background(DancheongColors.Cheongnok, RoundedCornerShape(6.dp)).padding(horizontal = 5.dp, vertical = 1.dp))
-            }
         }
         Spacer(Modifier.width(8.dp))
         RoundIcon(if (state.muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp, "음성 끄기", onMute)

@@ -72,7 +72,7 @@ class ServerStoreViewModel @Inject constructor(
     val message: StateFlow<String?> = _message.asStateFlow()
 
     init {
-        StoreKind.entries.forEach { kind ->
+        SHOWN_KINDS.forEach { kind ->
             viewModelScope.launch {
                 repo.folder(kind).distinctUntilChanged().collect { folder ->
                     edit(kind) { it.copy(folder = folder) }
@@ -127,6 +127,9 @@ class ServerStoreViewModel @Inject constructor(
     }
 }
 
+/** 폰에서 올리는 것은 3D 모델만 — RAG 자료는 웹의 RAG 자료 편집기에서 */
+private val SHOWN_KINDS = listOf(StoreKind.MODEL)
+
 @Composable
 fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewModel = hiltViewModel()) {
     val sections by viewModel.sections.collectAsStateWithLifecycle()
@@ -146,7 +149,7 @@ fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewMod
             modifier = Modifier.fillMaxWidth().clickable { open = !open }.padding(vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("🗄 서버 저장소 (관리자) · 3D 모델 · RAG 자료", fontSize = 13.sp, color = DancheongColors.MeokSoft)
+            Text("🗄 서버 저장소 (관리자) · 3D 모델", fontSize = 13.sp, color = DancheongColors.MeokSoft)
             Spacer(Modifier.weight(1f))
             Text(if (open) "▲" else "▼", fontSize = 11.sp, color = DancheongColors.MeokSoft)
         }
@@ -154,13 +157,13 @@ fun ServerStoreCard(modifier: Modifier = Modifier, viewModel: ServerStoreViewMod
 
         Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(bottom = 14.dp)) {
             Text(
-                "폰 폴더의 파일을 서버에 올려요. 파일 이름은 인물·유적 이름 그대로 (예: 이순신.glb, 수원 화성.md). " +
-                    "다른 폰은 다음에 그 인물을 만날 때 서버에서 받아 와요.",
+                "폰 폴더의 3D 모델을 서버에 올려요. 파일 이름은 인물 이름 그대로 (예: 이순신.glb). " +
+                    "다른 폰은 다음에 그 인물을 만날 때 서버에서 받아 와요. RAG 자료는 웹의 RAG 자료 편집기에서 고쳐요.",
                 fontSize = 11.5.sp,
                 lineHeight = 16.sp,
                 color = DancheongColors.MeokSoft,
             )
-            StoreKind.entries.forEach { kind ->
+            SHOWN_KINDS.forEach { kind ->
                 FolderSection(
                     kind = kind,
                     section = sections.getValue(kind),

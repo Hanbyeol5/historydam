@@ -97,21 +97,7 @@ fun ChatScreen(
             )
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(name, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DancheongColors.Meok)
-                    state.modeBadge?.let { badge ->
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            badge,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier
-                                .background(DancheongColors.Cheongnok, RoundedCornerShape(6.dp))
-                                .padding(horizontal = 6.dp, vertical = 1.dp),
-                        )
-                    }
-                }
+                Text(name, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DancheongColors.Meok)
                 Text(
                     if (state.responding) "● 답을 생각하는 중…" else "● 대화 중 · ${figure?.title.orEmpty()}",
                     fontSize = 11.sp,

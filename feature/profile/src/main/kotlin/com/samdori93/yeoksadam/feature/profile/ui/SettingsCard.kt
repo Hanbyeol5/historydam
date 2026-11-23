@@ -20,7 +20,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -28,7 +27,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.samdori93.yeoksadam.core.designsystem.theme.DancheongColors
-import com.samdori93.yeoksadam.core.designsystem.theme.NanumMyeongjo
 import com.samdori93.yeoksadam.core.domain.model.ChatSettings
 import com.samdori93.yeoksadam.core.domain.repository.ChatRepository
 import com.samdori93.yeoksadam.core.domain.repository.SettingsRepository
@@ -39,7 +37,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** 설정 — 지식 경계 안내 · 대화 기록. 인물 대화 방식은 화면에서 고르지 않는다(저장된 값, 기본 백엔드 RAG). */
+/** 설정 — 대화 기록. 지식 경계는 늘 켜져 있어 설정에 두지 않는다. 인물 대화 방식은 화면에서 고르지 않는다(저장된 값, 기본 백엔드 RAG). */
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
@@ -84,21 +82,6 @@ fun SettingsCard(modifier: Modifier = Modifier, viewModel: SettingsViewModel = h
         if (!open) return@Column
 
         Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 14.dp)) {
-            // 지식 경계는 늘 켠다 — 끌 수 없다
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DancheongColors.Hanji, RoundedCornerShape(12.dp))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            ) {
-                Text("지식 경계 · 늘 켜짐", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = DancheongColors.Meok)
-                Text(
-                    "인물은 세상을 떠난 해 이후의 일(연도·사건·근대 문물·후대 인물)을 물으면 답을 지어내지 않고 모른다고 답해요. RAG 서버 방식에서는 사후의 기록도 검색에서 빼요. (해설사는 해당 없음)",
-                    fontSize = 11.5.sp,
-                    lineHeight = 16.sp,
-                    color = DancheongColors.MeokSoft,
-                )
-            }
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 4.dp)) {
                 Text(
                     if (rooms > 0) "대화 기록: 인물 ${rooms}명과의 대화가 저장됨" else "대화 기록: 저장된 대화 없음",

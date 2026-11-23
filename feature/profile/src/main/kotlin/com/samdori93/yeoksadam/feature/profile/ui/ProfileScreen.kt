@@ -118,7 +118,7 @@ private fun ProfileContent(
             // 내 계정 (로그인 · 서버 저장 기록 · 내 질문 퀴즈)
             AccountCard(discoveryCount = discoveries.size, figureCount = figureCount)
 
-            // 설정 (지식 경계 · 대화 기록)
+            // 설정 (대화 기록)
             SettingsCard()
             Spacer(Modifier.height(10.dp))
             ServerStoreCard()
