@@ -16,9 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +73,7 @@ fun ProfileScreen(
     )
 }
 
+private const val GRID_COLUMNS = 3
 private val TAB_TYPES = listOf(DiscoveryType.SITE, DiscoveryType.FIGURE, DiscoveryType.RELIC)
 private val TAB_LABELS = listOf("유적지", "인물", "유물")
 
@@ -115,76 +113,85 @@ private fun ProfileContent(
             Icon(Icons.Filled.MoreHoriz, "더보기", tint = DancheongColors.Meok, modifier = Modifier.size(24.dp))
         }
 
-        // 내 계정 (로그인 · 서버 저장 기록 · 내 질문 퀴즈)
-        AccountCard(discoveryCount = discoveries.size, figureCount = figureCount)
+        // 상단바 아래는 한꺼번에 스크롤 — 카드를 펼쳐도 아래 도감까지 내려갈 수 있게
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
+            // 내 계정 (로그인 · 서버 저장 기록 · 내 질문 퀴즈)
+            AccountCard(discoveryCount = discoveries.size, figureCount = figureCount)
 
-        // 설정 (대화 방식 · 지식 경계 · 대화 기록)
-        SettingsCard()
-        Spacer(Modifier.height(10.dp))
-        ServerStoreCard()
-        Spacer(Modifier.size(14.dp))
+            // 설정 (지식 경계 · 대화 기록)
+            SettingsCard()
+            Spacer(Modifier.height(10.dp))
+            ServerStoreCard()
+            Spacer(Modifier.size(14.dp))
 
-        // 역사의 전당
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Box(
-                modifier = Modifier.size(24.dp).background(DancheongColors.Jujak, RoundedCornerShape(7.dp)),
-                contentAlignment = Alignment.Center,
+            // 역사의 전당
+            Row(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text("堂", color = Color.White, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            }
-            Text("역사의 전당", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DancheongColors.Meok)
-        }
-
-        // 탭
-        Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .background(DancheongColors.HanjiDim, RoundedCornerShape(12.dp))
-                .padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            TAB_LABELS.forEachIndexed { i, label ->
-                val on = i == tab
-                val count = discoveries.count { it.type == TAB_TYPES[i] }
                 Box(
-                    modifier = Modifier
-                        .background(if (on) DancheongColors.HanjiCard else Color.Transparent, RoundedCornerShape(9.dp))
-                        .clickable { tab = i }
-                        .padding(horizontal = 18.dp, vertical = 7.dp),
+                    modifier = Modifier.size(24.dp).background(DancheongColors.Jujak, RoundedCornerShape(7.dp)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        if (count > 0) "$label $count" else label,
-                        color = if (on) DancheongColors.Jujak else DancheongColors.MeokSoft,
-                        fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
-                        fontSize = 13.sp,
-                    )
+                    Text("堂", color = Color.White, fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                Text("역사의 전당", fontFamily = NanumMyeongjo, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = DancheongColors.Meok)
+            }
+
+            // 탭
+            Row(
+                modifier = Modifier
+                    .padding(16.dp)
+                    .background(DancheongColors.HanjiDim, RoundedCornerShape(12.dp))
+                    .padding(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                TAB_LABELS.forEachIndexed { i, label ->
+                    val on = i == tab
+                    val count = discoveries.count { it.type == TAB_TYPES[i] }
+                    Box(
+                        modifier = Modifier
+                            .background(if (on) DancheongColors.HanjiCard else Color.Transparent, RoundedCornerShape(9.dp))
+                            .clickable { tab = i }
+                            .padding(horizontal = 18.dp, vertical = 7.dp),
+                    ) {
+                        Text(
+                            if (count > 0) "$label $count" else label,
+                            color = if (on) DancheongColors.Jujak else DancheongColors.MeokSoft,
+                            fontWeight = if (on) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 13.sp,
+                        )
+                    }
                 }
             }
-        }
 
-        // 도감 그리드 / 빈 상태
-        if (current.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "아직 발견한 ${TAB_LABELS[tab]}이 없어요.\n카메라로 문화재를 촬영해 보세요.",
-                    textAlign = TextAlign.Center,
-                    fontSize = 13.sp,
-                    color = DancheongColors.MeokSoft,
-                )
-            }
-        } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                items(current, key = { "${it.type}_${it.refId}" }) { item ->
-                    DiscoveryCell(item, onClick = { selected = item })
+            // 도감 그리드 / 빈 상태
+            if (current.isEmpty()) {
+                Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
+                    Text(
+                        "아직 발견한 ${TAB_LABELS[tab]}이 없어요.\n카메라로 문화재를 촬영해 보세요.",
+                        textAlign = TextAlign.Center,
+                        fontSize = 13.sp,
+                        color = DancheongColors.MeokSoft,
+                    )
+                }
+            } else {
+                // 바깥이 스크롤되므로 지연 그리드 대신 3칸씩 줄로 그린다
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    current.chunked(GRID_COLUMNS).forEach { row ->
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            row.forEach { item ->
+                                Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                                    DiscoveryCell(item, onClick = { selected = item })
+                                }
+                            }
+                            repeat(GRID_COLUMNS - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                    }
                 }
             }
         }
